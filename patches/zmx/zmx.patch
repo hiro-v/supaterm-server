@@ -1,0 +1,60 @@
+diff --git a/src/main.zig b/src/main.zig
+index 35d1058..bb6af6f 100644
+--- a/src/main.zig
++++ b/src/main.zig
+@@ -91,6 +91,47 @@ pub fn main() !void {
+         const sesh = try socket.getSeshName(alloc, session_name orelse sesh_env);
+         defer alloc.free(sesh);
+         return history(&cfg, sesh, format);
++    } else if (std.mem.eql(u8, cmd, "bootstrap") or std.mem.eql(u8, cmd, "b")) {
++        const session_name = args.next() orelse "";
++
++        var command_args: std.ArrayList([]const u8) = .empty;
++        defer command_args.deinit(alloc);
++        while (args.next()) |arg| {
++            try command_args.append(alloc, arg);
++        }
++
++        const clients = try std.ArrayList(*Client).initCapacity(alloc, 10);
++        var command: ?[][]const u8 = null;
++        if (command_args.items.len > 0) {
++            command = command_args.items;
++        }
++
++        var cwd_buf: [std.fs.max_path_bytes]u8 = undefined;
++        const cwd = std.posix.getcwd(&cwd_buf) catch "";
++
++        const sesh = try socket.getSeshName(alloc, session_name);
++        defer alloc.free(sesh);
++        var daemon = Daemon{
++            .running = true,
++            .cfg = &cfg,
++            .alloc = alloc,
++            .clients = clients,
++            .session_name = sesh,
++            .socket_path = undefined,
++            .pid = undefined,
++            .command = command,
++            .cwd = cwd,
++            .created_at = @intCast(std.time.timestamp()),
++            .leader_client_fd = null,
++        };
++        daemon.socket_path = socket.getSocketPath(alloc, cfg.socket_dir, sesh) catch |err| switch (err) {
++            error.NameTooLong => return socket.printSessionNameTooLong(sesh, cfg.socket_dir),
++            error.OutOfMemory => return err,
++        };
++        std.log.info("socket path={s}", .{daemon.socket_path});
++        const result = try daemon.ensureSession();
++        if (result.is_daemon) return;
++        return;
+     } else if (std.mem.eql(u8, cmd, "attach") or std.mem.eql(u8, cmd, "a")) {
+         const session_name = args.next() orelse "";
+ 
+@@ -873,6 +914,7 @@ fn help() !void {
+         \\Usage: zmx <command> [args]
+         \\
+         \\Commands:
++        \\  [b]ootstrap <name> [command...] Ensure session exists without attaching a client
+         \\  [a]ttach <name> [command...]   Attach to session, creating session if needed
+         \\  [r]un <name> [command...]      Send command without attaching, creating session if needed
+         \\  [d]etach                       Detach all clients from current session (ctrl+\ for current client)

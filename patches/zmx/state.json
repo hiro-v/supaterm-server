@@ -1,0 +1,6 @@
+{
+  "upstreamRef": "HEAD",
+  "upstreamCommit": "5f30ba86c5428782d7160c8fb7684da66a4c3465",
+  "updatedAt": "2026-04-12T21:44:35Z",
+  "patchFile": "/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/patches/zmx/zmx.patch"
+}

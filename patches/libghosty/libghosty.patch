@@ -1,0 +1,58 @@
+diff --git a/third_party/libghostty/lib/selection-manager.ts b/third_party/libghostty/lib/selection-manager.ts
+index 56d4605..ad7164a 100644
+--- a/third_party/libghostty/lib/selection-manager.ts
++++ b/third_party/libghostty/lib/selection-manager.ts
+@@ -350,10 +350,7 @@ export class SelectionManager {
+    * Focus the terminal (make it receive keyboard input)
+    */
+   focus(): void {
+-    const canvas = this.renderer.getCanvas();
+-    if (canvas.parentElement) {
+-      canvas.parentElement.focus();
+-    }
++    this.textarea.focus();
+   }
+ 
+   /**
+@@ -436,11 +433,9 @@ export class SelectionManager {
+       if (e.button === 0) {
+         // Left click only
+ 
+-        // CRITICAL: Focus the terminal so it can receive keyboard input
+-        // The canvas doesn't have tabindex, but the parent container does
+-        if (canvas.parentElement) {
+-          canvas.parentElement.focus();
+-        }
++        // Keep input focus on the hidden textarea so keyboard input
++        // continues to flow through the terminal input path.
++        this.textarea.focus();
+ 
+         const cell = this.pixelToCell(e.offsetX, e.offsetY);
+ 
+diff --git a/third_party/libghostty/lib/terminal.ts b/third_party/libghostty/lib/terminal.ts
+index eeb7acd..a9f5ebf 100644
+--- a/third_party/libghostty/lib/terminal.ts
++++ b/third_party/libghostty/lib/terminal.ts
+@@ -736,14 +736,16 @@ export class Terminal implements ITerminalCore {
+    * Focus terminal input
+    */
+   focus(): void {
+-    if (this.isOpen && this.element) {
+-      // Focus immediately for immediate keyboard/wheel event handling
+-      this.element.focus();
++    if (this.isOpen) {
++      const focusTarget = this.textarea ?? this.element;
++      if (!focusTarget) return;
++
++      // Focus immediately for immediate keyboard/wheel event handling.
++      focusTarget.focus();
+ 
+-      // Also schedule a delayed focus as backup to ensure it sticks
+-      // (some browsers may need this if DOM isn't fully settled)
++      // Also schedule a delayed focus as backup to ensure it sticks.
+       setTimeout(() => {
+-        this.element?.focus();
++        (this.textarea ?? this.element)?.focus();
+       }, 0);
+     }
+   }

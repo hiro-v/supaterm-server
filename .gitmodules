@@ -1,0 +1,6 @@
+[submodule "third_party/zmx"]
+	path = third_party/zmx
+	url = https://github.com/neurosnap/zmx.git
+[submodule "third_party/libghostty/ghostty"]
+	path = third_party/libghostty/ghostty
+	url = https://github.com/ghostty-org/ghostty.git
