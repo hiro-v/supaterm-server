@@ -1,0 +1,80 @@
+name: test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: core (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Compute cache key inputs
+        id: cache_key
+        shell: bash
+        run: |
+          echo "libghostty=$(git rev-parse HEAD:third_party/libghostty/ghostty)" >> "$GITHUB_OUTPUT"
+          echo "zmx=$(git rev-parse HEAD:third_party/zmx)" >> "$GITHUB_OUTPUT"
+
+      - uses: ./.github/actions/setup-ci
+        with:
+          cache-key-suffix: ${{ hashFiles('bun.lock', 'package.json', '.gitmodules', 'zlint.json', 'patches/libghosty/libghosty.patch', 'patches/zmx/zmx.patch') }}-${{ steps.cache_key.outputs.libghostty }}-${{ steps.cache_key.outputs.zmx }}
+
+      - run: bun run zig:lint
+      - run: zig build check
+      - run: bun run web:typecheck
+      - run: bun run test:unit
+      - run: bun run test:integration
+      - run: bun run test:contract
+      - run: bun run test:e2e
+      - run: bun run web:build
+
+  browser:
+    name: browser (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Compute cache key inputs
+        id: cache_key
+        shell: bash
+        run: |
+          echo "libghostty=$(git rev-parse HEAD:third_party/libghostty/ghostty)" >> "$GITHUB_OUTPUT"
+          echo "zmx=$(git rev-parse HEAD:third_party/zmx)" >> "$GITHUB_OUTPUT"
+
+      - uses: ./.github/actions/setup-ci
+        with:
+          cache-key-suffix: ${{ hashFiles('bun.lock', 'package.json', '.gitmodules', 'zlint.json', 'patches/libghosty/libghosty.patch', 'patches/zmx/zmx.patch') }}-${{ steps.cache_key.outputs.libghostty }}-${{ steps.cache_key.outputs.zmx }}
+          install-playwright: "true"
+
+      - run: bun run test:browser
