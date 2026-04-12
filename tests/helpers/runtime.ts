@@ -177,7 +177,8 @@ export async function openTerminalSession(options: {
         return;
       }
       const sendCommand = () => {
-        ws.send(`${options.command}; printf '${marker}\\n'\r`);
+        // Clear any partially-edited shell line before sending scripted input.
+        ws.send(`\u0015${options.command}; printf '${marker}\\n'\r`);
       };
       const delayMs = options.delayBeforeCommandMs ?? 0;
       if (delayMs > 0) {
