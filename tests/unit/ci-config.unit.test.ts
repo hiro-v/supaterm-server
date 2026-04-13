@@ -34,9 +34,21 @@ describe('CI and hook configuration', () => {
     expect(action).toContain('~/.bun/install/cache');
     expect(action).toContain('~/.cache/zig');
     expect(action).toContain('~/.cache/ms-playwright');
+    expect(action).toContain('.tooling/zlint/zig-out');
     expect(action).toContain('third_party/zmx/.zig-cache');
     expect(action).toContain('third_party/libghostty/node_modules');
     expect(action).toContain('cd third_party/libghostty');
+    expect(action).toContain('git clone --depth=1 https://github.com/DonIsaac/zlint.git .tooling/zlint');
+    expect(action).toContain('ZLINT_BIN=${GITHUB_WORKSPACE}/.tooling/zlint/zig-out/bin/zlint');
+  });
+
+  test('browser test script self-hosts the app instead of assuming port 3000 is already in use', () => {
+    const packageJson = readRepoFile('package.json');
+    const browserScript = readRepoFile('scripts/test-browser.ts');
+
+    expect(packageJson).toContain('"test:browser": "bun run ./scripts/test-browser.ts"');
+    expect(browserScript).toContain('startServer({');
+    expect(browserScript).toContain("SUPATERM_BASE_URL: server.baseUrl");
   });
 
   test('tip release workflow force-moves the tip tag and updates the prerelease', () => {

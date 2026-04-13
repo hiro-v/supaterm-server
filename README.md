@@ -41,6 +41,8 @@ bun run test:browser
 zig build check
 ```
 
+`bun run test:browser` self-hosts a temporary local server for the Playwright run. It no longer depends on a manually running server on port `3000`.
+
 Full proof:
 ```bash
 bun run test
@@ -56,6 +58,8 @@ CI and release:
 - test matrix: [.github/workflows/test.yml](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/.github/workflows/test.yml)
 - shared cache/bootstrap action: [.github/actions/setup-ci/action.yml](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/.github/actions/setup-ci/action.yml)
 - tip channel updater: [.github/workflows/release-tip.yml](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/.github/workflows/release-tip.yml)
+
+The shared CI action also provisions `zlint` and exports `ZLINT_BIN` so Zig linting works on clean GitHub runners without relying on GHQ.
 
 ## Docs
 

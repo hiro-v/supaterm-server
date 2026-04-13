@@ -32,6 +32,8 @@ bun run test:e2e
 bun run test:browser
 ```
 
+`test:browser` is self-contained. It boots a temporary local server, exports its base URL to Playwright, and shuts the server down after the browser run.
+
 Component-focused coverage in `test:unit` now includes:
 - workbench state transforms
 - workbench command generation
@@ -136,6 +138,7 @@ Primary workflows:
 Current CI policy:
 - run Linux and macOS first
 - restore Bun, Zig, build, and Playwright caches through the shared setup action
+- provision `zlint` in CI and export `ZLINT_BIN` for the repo lint script
 - checkout submodules recursively so vendored `ghostty` and `zmx` source are present before any build/test step
 - keep the `tip` prerelease channel aligned with `main` by force-moving the `tip` tag and refreshing the GitHub prerelease assets
 

@@ -17,3 +17,4 @@ third_party/libghostty/ghostty-vt.wasm
 *.rej
 .DS_Store
 .turbo/
+.tooling/

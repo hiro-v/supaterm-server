@@ -16,7 +16,7 @@
     "test:integration": "bun test tests/integration",
     "test:contract": "bun test tests/contracts",
     "test:e2e": "bun run zmx:apply && bun test tests/e2e",
-    "test:browser": "playwright test tests/browser/workbench.browser.spec.ts --reporter=line",
+    "test:browser": "bun run ./scripts/test-browser.ts",
     "hooks:install": "git config core.hooksPath .git-hooks",
     "hooks:pre-commit": "bun run ./scripts/pre-commit.ts",
     "zig": "zig build",

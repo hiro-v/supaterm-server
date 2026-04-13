@@ -1,7 +1,9 @@
 import { test, expect, type Page } from '@playwright/test';
 
+const baseUrl = process.env.SUPATERM_BASE_URL ?? 'http://127.0.0.1:3000';
+
 async function openFreshWorkbench(page: Page) {
-  await page.goto('http://127.0.0.1:3000/');
+  await page.goto(baseUrl);
   await page.evaluate(() => {
     window.localStorage.clear();
   });

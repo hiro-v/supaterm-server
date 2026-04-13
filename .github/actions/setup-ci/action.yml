@@ -32,6 +32,8 @@ runs:
           ~/.cache/zig
           .zig-cache
           zig-out
+          .tooling/zlint/zig-out
+          .tooling/zlint/.zig-cache
           third_party/zmx/.zig-cache
           third_party/zmx/zig-out
           node_modules
@@ -58,6 +60,20 @@ runs:
       run: |
         cd third_party/libghostty
         bun install --frozen-lockfile || bun install
+
+    - name: Install zlint
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ ! -x ".tooling/zlint/zig-out/bin/zlint" ]; then
+          rm -rf .tooling/zlint
+          git clone --depth=1 https://github.com/DonIsaac/zlint.git .tooling/zlint
+          (
+            cd .tooling/zlint
+            zig build --release=safe
+          )
+        fi
+        echo "ZLINT_BIN=${GITHUB_WORKSPACE}/.tooling/zlint/zig-out/bin/zlint" >> "$GITHUB_ENV"
 
     - name: Install Playwright Chromium
       if: ${{ inputs.install-playwright == 'true' }}
