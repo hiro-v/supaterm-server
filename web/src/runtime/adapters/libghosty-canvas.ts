@@ -1,7 +1,7 @@
 import { FitAddon, Terminal, init } from 'libghosty';
 import type { TerminalVisualProfile } from '../profile';
 
-const terminalInitPromise = init();
+let terminalInitPromise: Promise<void> | null = null;
 
 export type TerminalRendererAdapterDescriptor = {
   id: string;
@@ -59,6 +59,7 @@ export class LibghostyCanvasAdapter implements TerminalRendererAdapter {
   }
 
   async start(): Promise<void> {
+    terminalInitPromise ??= init();
     await terminalInitPromise;
     if (this.terminal) return;
 
