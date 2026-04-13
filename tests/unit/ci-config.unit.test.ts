@@ -36,6 +36,8 @@ describe('CI and hook configuration', () => {
     expect(action).toContain('~/.cache/ms-playwright');
     expect(action).toContain('.tooling/zlint/zig-out');
     expect(action).toContain('third_party/zmx/.zig-cache');
+    expect(action).toContain('cd web');
+    expect(action).toContain('bun install --frozen-lockfile');
     expect(action).toContain('third_party/libghostty/node_modules');
     expect(action).toContain('cd third_party/libghostty');
     expect(action).toContain('git clone --depth=1 https://github.com/DonIsaac/zlint.git .tooling/zlint');
