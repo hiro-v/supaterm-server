@@ -15,7 +15,7 @@
     "test:unit": "zig test src/parse_utils.zig && bun test tests/unit",
     "test:integration": "bun test tests/integration",
     "test:contract": "bun test tests/contracts",
-    "test:e2e": "bun run zmx:apply && bun test tests/e2e",
+    "test:e2e": "bun run zmx:apply && (cd third_party/zmx && zig build -Doptimize=ReleaseSafe) && bun test tests/e2e",
     "test:browser": "bun run ./scripts/test-browser.ts",
     "hooks:install": "git config core.hooksPath .git-hooks",
     "hooks:pre-commit": "bun run ./scripts/pre-commit.ts",

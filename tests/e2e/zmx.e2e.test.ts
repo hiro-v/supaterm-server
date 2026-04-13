@@ -28,7 +28,7 @@ describe('zmx e2e', () => {
       zmxSocketDir: tmpDir,
       env: { ZMX_DIR: tmpDir },
     });
-  });
+  }, 30_000);
 
   afterAll(async () => {
     if (server) {
