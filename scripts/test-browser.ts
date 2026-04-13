@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
 import { spawn } from 'node:child_process';
 import process from 'node:process';
-import { startServer } from '../tests/helpers/runtime';
+import { ensureWebBuilt, startServer } from '../tests/helpers/runtime';
 
+await ensureWebBuilt();
 const server = await startServer({
   backend: 'local',
   enableShareApi: true,

@@ -37,7 +37,7 @@
     "third-party:zmx:sync": "bun run zmx:sync",
     "third-party:zmx:patch": "bun run zmx:patch",
     "third-party:zmx:apply": "bun run zmx:apply",
-    "web:build": "bun run third-party:libghostty && cd web && bun run build",
+    "web:build": "bun run libghosty:apply && sh -c 'test -f third_party/libghostty/ghostty-vt.wasm || (cd third_party/libghostty && bun run build:wasm)' && cd web && bun run build",
     "web:typecheck": "bun run libghosty:apply && cd web && bun run typecheck",
     "web:lint": "bun run libghosty:apply && cd web && bun run lint",
     "ast:zig:parse": "sh ./scripts/tree-sitter.sh parse zig src/main.zig src/session_http.zig src/session_manager.zig src/session_backends.zig",

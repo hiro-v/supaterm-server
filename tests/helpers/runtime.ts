@@ -11,6 +11,7 @@ const serverBinary = path.join(root, 'zig-out', 'bin', 'supaterm-server');
 const zmxBinary = path.join(root, 'third_party', 'zmx', 'zig-out', 'bin', 'zmx');
 
 let serverBuildPromise: Promise<void> | null = null;
+let webBuildPromise: Promise<void> | null = null;
 let zmxBuildPromise: Promise<void> | null = null;
 
 export type StartedServer = {
@@ -42,6 +43,13 @@ export async function ensureServerBuilt(): Promise<void> {
     runChecked(['zig', 'build'], root);
   });
   await serverBuildPromise;
+}
+
+export async function ensureWebBuilt(): Promise<void> {
+  webBuildPromise ??= Promise.resolve().then(() => {
+    runChecked(['bun', 'run', 'web:build'], root);
+  });
+  await webBuildPromise;
 }
 
 export async function ensureZmxBuilt(): Promise<void> {

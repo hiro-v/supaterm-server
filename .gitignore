@@ -13,7 +13,6 @@ web/node_modules/
 web/dist/
 third_party/libghostty/node_modules/
 third_party/libghostty/dist/
-third_party/libghostty/ghostty-vt.wasm
 *.rej
 .DS_Store
 .turbo/

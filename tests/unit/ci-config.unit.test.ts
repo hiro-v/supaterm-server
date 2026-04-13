@@ -47,10 +47,14 @@ describe('CI and hook configuration', () => {
   test('browser test script self-hosts the app instead of assuming port 3000 is already in use', () => {
     const packageJson = readRepoFile('package.json');
     const browserScript = readRepoFile('scripts/test-browser.ts');
+    const libghosttyIgnore = readRepoFile('third_party/libghostty/.gitignore');
 
     expect(packageJson).toContain('"test:browser": "bun run ./scripts/test-browser.ts"');
+    expect(packageJson).toContain('"web:build": "bun run libghosty:apply');
     expect(browserScript).toContain('startServer({');
+    expect(browserScript).toContain('ensureWebBuilt()');
     expect(browserScript).toContain("SUPATERM_BASE_URL: server.baseUrl");
+    expect(libghosttyIgnore).not.toContain('ghostty-vt.wasm');
   });
 
   test('tip release workflow force-moves the tip tag and updates the prerelease', () => {

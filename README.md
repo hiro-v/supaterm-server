@@ -29,7 +29,7 @@ Build the web bundle:
 bun run web:build
 ```
 
-The web and `zmx` scripts auto-apply tracked vendor patches before they build or test against vendored source.
+The web and `zmx` scripts auto-apply tracked vendor patches before they build or test against vendored source. The browser bundle consumes the vendored `libghostty` TypeScript sources directly and uses the pinned `third_party/libghostty/ghostty-vt.wasm` artifact, so CI does not depend on Ghostty fetching extra upstream assets on every `web:build`.
 
 ## Verification
 
@@ -84,6 +84,7 @@ Vendored upstreams:
 
 Local wrapper package:
 - `third_party/libghostty`
+- pinned runtime artifact: `third_party/libghostty/ghostty-vt.wasm`
 
 Update them through tracked git patches, not ad hoc local edits:
 ```bash

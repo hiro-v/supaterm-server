@@ -33,6 +33,7 @@ bun run test:browser
 ```
 
 `test:browser` is self-contained. It boots a temporary local server, exports its base URL to Playwright, and shuts the server down after the browser run.
+Before it boots the server, it also runs `bun run web:build` so clean runners always have `web/dist`.
 
 Component-focused coverage in `test:unit` now includes:
 - workbench state transforms
@@ -84,6 +85,7 @@ bun run zmx:smoke
 ```
 
 The repo-level `web:*`, `test:e2e`, and `zmx:smoke` scripts auto-apply the tracked vendor patches first so a clean checkout remains reproducible.
+`web:build` uses the vendored `libghostty` TypeScript source plus the pinned `third_party/libghostty/ghostty-vt.wasm` artifact. Rebuild that WASM explicitly from vendored Ghostty only when you intend to refresh it.
 
 ## AST and Inspection
 
