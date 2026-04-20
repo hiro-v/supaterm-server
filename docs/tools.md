@@ -55,7 +55,7 @@ Component-focused coverage in `test:unit` now includes:
 - workbench pane-tree rendering through injected pane clients
 - vendor patch workflow scripts for `libghosty` and `zmx`
 
-`test:e2e` now also covers `zmx` reconnect reuse across websocket disconnects so the persistent backend path is exercised directly.
+`test:e2e` now also covers `zmx` reconnect reuse across websocket disconnects and attaching to a pre-existing raw `zmx` session name, so the persistent backend path is exercised directly.
 
 Proof:
 ```bash

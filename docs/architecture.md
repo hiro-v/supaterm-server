@@ -109,6 +109,7 @@ Current reconnect/hydration rule:
 - the browser restores layout from the server snapshot, then reattaches each pane by its stable pane session id
 - authoritative terminal state comes from the backend itself, which is the intended restore path for `zmx`
 - `zmx` reconnect is treated as a first-class persistence path and is covered by e2e reuse checks
+- when a pane session id already matches a real local `zmx` session name, the backend now probes and attaches to that raw session first instead of forcing a hashed `sess-...` alias
 
 Current shared-layout rule:
 - the top-level `?session=` query is also the shared workbench snapshot id

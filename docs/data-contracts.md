@@ -141,4 +141,4 @@ The shared snapshot contains:
 - renamed titles
 - sidebar collapsed state
 
-Backend session continuity comes from the stable pane session IDs and the selected backend mode. For `zmx`, that is the intended fresh-browser restore path: fetch the shared workbench snapshot, rebuild the workspace/tab/pane layout, then reattach each pane to the same backend session id.
+Backend session continuity comes from the stable pane session IDs and the selected backend mode. For `zmx`, that is the intended fresh-browser restore path: fetch the shared workbench snapshot, rebuild the workspace/tab/pane layout, then reattach each pane to the same backend session id. When a pane session id already names a real local `zmx` session, the server now probes and attaches to that raw session first; otherwise it falls back to Supaterm's deterministic hashed `sess-...` alias.

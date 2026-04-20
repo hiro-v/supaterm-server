@@ -20,6 +20,7 @@ Current split:
 - `src/session_backends.zig`
   - local PTY backend
   - zmx backend
+  - raw existing `zmx` session-name probe before hashed alias fallback
 - `src/main.zig`
   - process config
   - HTTP serving
