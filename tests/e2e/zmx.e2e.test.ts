@@ -12,6 +12,8 @@ import type { WorkbenchState } from '../../web/src/workbench/state';
 import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 
 describe('zmx e2e', () => {
   const sessionId = 'e2e.zmx:v1';
@@ -169,5 +171,72 @@ describe('zmx e2e', () => {
       timeoutMs: 20_000,
     });
     expect(second.transcript).toContain('__ZMX_LAYOUT_RESTORE_SECOND__');
+  });
+
+  test('attaches to an existing raw zmx session name without creating a hashed alias', async () => {
+    const rawSessionId = 'existing-raw';
+    const hashedAlias = `sess-${createHash('sha256').update(rawSessionId).digest('hex').slice(0, 16)}`;
+    const bootstrap = spawnSync(
+      path.join(process.cwd(), 'third_party', 'zmx', 'zig-out', 'bin', 'zmx'),
+      [
+        'bootstrap',
+        rawSessionId,
+        '/bin/sh',
+        '-c',
+        "printf '__RAW_EXISTING__\\n'; exec /bin/sh",
+      ],
+      {
+        env: {
+          ...process.env,
+          ZMX_DIR: tmpDir,
+        },
+        encoding: 'utf8',
+      },
+    );
+    expect(bootstrap.status).toBe(0);
+
+    await Bun.sleep(500);
+
+    const token = computeSessionShareToken(rawSessionId, shareSecret);
+    const attached = await openTerminalSessionWithTrace({
+      port: server.port,
+      sessionId: rawSessionId,
+      token,
+      command: "printf '__RAW_ATTACH__\\n'",
+      completionMarker: '__RAW_ATTACH_DONE__',
+      delayBeforeCommandMs: 750,
+      timeoutMs: 20_000,
+    });
+    expect(attached.transcript).toContain('__RAW_ATTACH__');
+
+    const listed = spawnSync(
+      path.join(process.cwd(), 'third_party', 'zmx', 'zig-out', 'bin', 'zmx'),
+      ['list', '--short'],
+      {
+        env: {
+          ...process.env,
+          ZMX_DIR: tmpDir,
+        },
+        encoding: 'utf8',
+      },
+    );
+    expect(listed.status).toBe(0);
+    expect(listed.stdout).toContain(rawSessionId);
+    expect(listed.stdout).not.toContain(hashedAlias);
+
+    const history = spawnSync(
+      path.join(process.cwd(), 'third_party', 'zmx', 'zig-out', 'bin', 'zmx'),
+      ['history', rawSessionId],
+      {
+        env: {
+          ...process.env,
+          ZMX_DIR: tmpDir,
+        },
+        encoding: 'utf8',
+      },
+    );
+    expect(history.status).toBe(0);
+    expect(history.stdout).toContain('__RAW_ATTACH__');
+    expect(history.stdout).not.toContain(hashedAlias);
   });
 });

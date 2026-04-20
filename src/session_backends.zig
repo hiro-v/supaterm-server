@@ -378,6 +378,41 @@ fn sanitizeSessionName(allocator: std.mem.Allocator, session_id: []const u8, pre
     return full;
 }
 
+fn sessionExistsAtDir(socket_dir: []const u8, session_name: []const u8) !bool {
+    var dir = try std.fs.openDirAbsolute(socket_dir, .{});
+    defer dir.close();
+
+    return zmx.sessionExists(dir, session_name) catch |err| switch (err) {
+        error.FileNotFound => false,
+        error.FileNotUnixSocket => BackendError.InvalidSessionType,
+        else => err,
+    };
+}
+
+fn resolveExistingZmxSessionName(
+    allocator: std.mem.Allocator,
+    socket_dir: []const u8,
+    session_id: []const u8,
+    prefix: []const u8,
+) !?[]const u8 {
+    try validateSessionName(session_id);
+
+    if (try sessionExistsAtDir(socket_dir, session_id)) {
+        return try allocator.dupe(u8, session_id);
+    }
+
+    if (prefix.len > 0) {
+        const prefixed = try std.fmt.allocPrint(allocator, "{s}{s}", .{ prefix, session_id });
+        defer allocator.free(prefixed);
+
+        if (try sessionExistsAtDir(socket_dir, prefixed)) {
+            return try allocator.dupe(u8, prefixed);
+        }
+    }
+
+    return null;
+}
+
 fn connectToZmxSocket(socket_path: []const u8) !posix.fd_t {
     var unix_addr = try std.net.Address.initUnix(socket_path);
     const fd = try posix.socket(posix.AF.UNIX, posix.SOCK.STREAM | posix.SOCK.CLOEXEC, 0);
@@ -702,16 +737,21 @@ pub fn createZmxBackend(
     opts: BackendOptions,
     cfg: ZmxClientOptions,
 ) !BackendHandle {
-    const full_name = try sanitizeSessionName(allocator, session_id, cfg.session_prefix);
-    defer allocator.free(full_name);
-
     const socket_dir = try resolveZmxSocketDir(allocator, cfg.socket_dir);
     defer allocator.free(socket_dir);
 
-    const socket_path = try getSocketPath(allocator, socket_dir, full_name);
+    const resolved_name = try resolveExistingZmxSessionName(
+        allocator,
+        socket_dir,
+        session_id,
+        cfg.session_prefix,
+    ) orelse try sanitizeSessionName(allocator, session_id, cfg.session_prefix);
+    defer allocator.free(resolved_name);
+
+    const socket_path = try getSocketPath(allocator, socket_dir, resolved_name);
     errdefer allocator.free(socket_path);
 
-    const fd = connectOrCreateZmxSocket(allocator, full_name, socket_path, socket_dir, opts.command, cfg) catch {
+    const fd = connectOrCreateZmxSocket(allocator, resolved_name, socket_path, socket_dir, opts.command, cfg) catch {
         return BackendError.BackendSpawnFailed;
     };
 
