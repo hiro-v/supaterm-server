@@ -2,6 +2,7 @@ const std = @import("std");
 const posix = std.posix;
 const cross = @import("cross.zig");
 const zmx = @import("zmx_bridge");
+const Sha256 = std.crypto.hash.sha2.Sha256;
 
 extern "c" fn setenv(name: [*:0]const u8, value: [*:0]const u8, overwrite: c_int) c_int;
 
@@ -22,6 +23,12 @@ pub const BackendOptions = struct {
     cols: u16 = 80,
     rows: u16 = 24,
     command: ?[]const u8 = null,
+    shell_startup: LocalShellStartup = .fast,
+};
+
+pub const LocalShellStartup = enum {
+    fast,
+    full,
 };
 
 pub const ZmxClientOptions = struct {
@@ -128,15 +135,7 @@ pub const LocalPtyBackend = struct {
                 };
                 std.posix.execvpeZ(shell_z.ptr, &argv, std.c.environ) catch std.process.exit(1);
             } else {
-                const login_txt = std.fmt.allocPrint(allocator, "-{s}", .{std.fs.path.basename(shell)}) catch std.process.exit(1);
-                defer allocator.free(login_txt);
-                const login = toCStr(allocator, login_txt) catch std.process.exit(1);
-                defer allocator.free(login);
-                const argv: [2:null]?[*:0]const u8 = .{
-                    login.ptr,
-                    null,
-                };
-                std.posix.execvpeZ(shell_z.ptr, &argv, std.c.environ) catch std.process.exit(1);
+                execInteractiveShell(allocator, shell, shell_z.ptr, opts.shell_startup) catch std.process.exit(1);
             }
 
             // If exec fails, exit the child immediately.
@@ -214,11 +213,62 @@ pub const LocalPtyBackend = struct {
     }
 };
 
+fn execInteractiveShell(
+    allocator: std.mem.Allocator,
+    shell_path: []const u8,
+    shell_z: [*:0]const u8,
+    startup: LocalShellStartup,
+) !noreturn {
+    const shell_name = std.fs.path.basename(shell_path);
+    const argv0 = try toCStr(allocator, shell_name);
+    defer allocator.free(argv0);
+
+    const startup_args = shellStartupArgs(shell_name, startup);
+    if (startup_args.len == 1) {
+        const arg1 = try toCStr(allocator, startup_args[0]);
+        defer allocator.free(arg1);
+        const argv: [3:null]?[*:0]const u8 = .{
+            argv0.ptr,
+            arg1.ptr,
+            null,
+        };
+        return std.posix.execvpeZ(shell_z, &argv, std.c.environ);
+    }
+    if (startup_args.len == 2) {
+        const arg1 = try toCStr(allocator, startup_args[0]);
+        defer allocator.free(arg1);
+        const arg2 = try toCStr(allocator, startup_args[1]);
+        defer allocator.free(arg2);
+        const argv: [4:null]?[*:0]const u8 = .{
+            argv0.ptr,
+            arg1.ptr,
+            arg2.ptr,
+            null,
+        };
+        return std.posix.execvpeZ(shell_z, &argv, std.c.environ);
+    }
+
+    const argv: [2:null]?[*:0]const u8 = .{
+        argv0.ptr,
+        null,
+    };
+    return std.posix.execvpeZ(shell_z, &argv, std.c.environ);
+}
+
 fn toCStr(allocator: std.mem.Allocator, value: []const u8) ![:0]u8 {
     const buf = try allocator.alloc(u8, value.len + 1);
     @memcpy(buf[0..value.len], value);
     buf[value.len] = 0;
     return buf[0..value.len :0];
+}
+
+fn shellStartupArgs(shell_name: []const u8, startup: LocalShellStartup) []const []const u8 {
+    if (startup == .fast) {
+        if (std.mem.eql(u8, shell_name, "bash")) return &.{ "--noprofile", "--norc" };
+        if (std.mem.eql(u8, shell_name, "zsh")) return &.{ "-f" };
+        if (std.mem.eql(u8, shell_name, "fish")) return &.{ "--no-config" };
+    }
+    return &.{};
 }
 
 const local_vtable = BackendVTable{
@@ -239,6 +289,26 @@ pub fn createBackend(
         .local => try LocalPtyBackend.init(allocator, opts),
         .zmx => try createZmxBackend(allocator, session_id, opts, zmx_opts),
     };
+}
+
+test "shell startup args prefer fast startup for supported shells" {
+    const bash_args = shellStartupArgs("bash", .fast);
+    try std.testing.expectEqual(@as(usize, 2), bash_args.len);
+    try std.testing.expectEqualStrings("--noprofile", bash_args[0]);
+    try std.testing.expectEqualStrings("--norc", bash_args[1]);
+
+    const zsh_args = shellStartupArgs("zsh", .fast);
+    try std.testing.expectEqual(@as(usize, 1), zsh_args.len);
+    try std.testing.expectEqualStrings("-f", zsh_args[0]);
+
+    const fish_args = shellStartupArgs("fish", .fast);
+    try std.testing.expectEqual(@as(usize, 1), fish_args.len);
+    try std.testing.expectEqualStrings("--no-config", fish_args[0]);
+}
+
+test "shell startup args fall back to full startup when unsupported or explicit" {
+    try std.testing.expectEqual(@as(usize, 0), shellStartupArgs("nu", .fast).len);
+    try std.testing.expectEqual(@as(usize, 0), shellStartupArgs("bash", .full).len);
 }
 
 const IpcTag = zmx.Tag;
@@ -288,11 +358,23 @@ fn getSocketPath(allocator: std.mem.Allocator, socket_dir: []const u8, session_n
 
 fn sanitizeSessionName(allocator: std.mem.Allocator, session_id: []const u8, prefix: []const u8) ![]const u8 {
     try validateSessionName(session_id);
+    var digest: [Sha256.digest_length]u8 = undefined;
+    Sha256.hash(session_id, &digest, .{});
 
-    const out_len = prefix.len + session_id.len;
+    const hex_len = 16;
+    const out_len = prefix.len + "sess-".len + hex_len;
     const full = try allocator.alloc(u8, out_len);
     @memcpy(full[0..prefix.len], prefix);
-    @memcpy(full[prefix.len..], session_id);
+    @memcpy(full[prefix.len .. prefix.len + "sess-".len], "sess-");
+
+    const hex = "0123456789abcdef";
+    var i: usize = 0;
+    while (i < hex_len / 2) : (i += 1) {
+        const byte = digest[i];
+        const offset = prefix.len + "sess-".len + (i * 2);
+        full[offset] = hex[byte >> 4];
+        full[offset + 1] = hex[byte & 0x0f];
+    }
     return full;
 }
 

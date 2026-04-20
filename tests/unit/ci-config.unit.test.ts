@@ -23,6 +23,33 @@ describe('CI and hook configuration', () => {
     expect(workflow).toContain('bun run test:contract');
     expect(workflow).toContain('bun run test:e2e');
     expect(workflow).toContain('bun run test:browser');
+    expect(workflow).toContain('name: perf report (ubuntu-latest)');
+    expect(workflow).toContain('continue-on-error: true');
+    expect(workflow).toContain('name: Resolve perf baseline source');
+    expect(workflow).toContain('git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"');
+    expect(workflow).toContain('git show "origin/${{ github.base_ref }}:.agent-harness/artifacts/perf-baseline.json"');
+    expect(workflow).toContain('SUPATERM_PERF_SAMPLES=1 bun run perf:current');
+    expect(workflow).toContain('bun run perf:check');
+    expect(workflow).toContain('SUPATERM_PERF_BASELINE_PATH=.agent-harness/artifacts/perf-baseline.base.json');
+    expect(workflow).toContain('actions/upload-artifact@v4');
+    expect(workflow).toContain('GITHUB_STEP_SUMMARY');
+    expect(workflow).toContain('PERF_BASELINE_SOURCE');
+    expect(workflow).toContain('formatTrend(report.comparisons.shellReadyMs)');
+    expect(workflow).toContain('formatTrend(report.comparisons.startup.workbenchMountedMs)');
+    expect(workflow).toContain('formatTrend(report.comparisons.startup.rendererReadyMs)');
+    expect(workflow).toContain('formatTrend(report.comparisons.startup.websocketOpenMs)');
+    expect(workflow).toContain('formatTrend(report.comparisons.startup.firstTerminalBytesMs)');
+    expect(workflow).toContain('formatTrend(report.comparisons.startup.firstPaneConnectedMarkMs)');
+    expect(workflow).toContain('formatTrend(report.comparisons.startup.serverOutputPumpStartedMs)');
+    expect(workflow).toContain('formatTrend(report.comparisons.startup.serverFirstBackendReadMs)');
+    expect(workflow).toContain('formatTrend(report.comparisons.startup.serverFirstBroadcastMs)');
+    expect(workflow).toContain('vs ${trend.baseline}${trend.unit}');
+    expect(workflow).toContain('.agent-harness/artifacts/perf-baseline.base.json');
+    expect(workflow).toContain('.agent-harness/artifacts/perf-current.json');
+    expect(workflow).toContain('.agent-harness/artifacts/perf-check.json');
+    expect(workflow).toContain('renderer atlas resets');
+    expect(workflow).toContain('rect buffer capacity');
+    expect(workflow).toContain('glyph buffer capacity');
   });
 
   test('shared setup action restores Bun, Zig, and Playwright caches', () => {

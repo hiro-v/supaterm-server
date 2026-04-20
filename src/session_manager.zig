@@ -4,6 +4,16 @@ const ws_frames = @import("ws_frames.zig");
 const backends = @import("session_backends.zig");
 const HmacSha256 = std.crypto.auth.hmac.sha2.HmacSha256;
 
+const attach_trace_prefix = "\x1e";
+
+pub const AttachTrace = struct {
+    session_reused: bool,
+    session_age_ms: u64,
+    output_pump_started_ms: ?u64,
+    first_backend_read_ms: ?u64,
+    first_broadcast_ms: ?u64,
+};
+
 pub const SessionOptions = struct {
     cols: u16 = 80,
     rows: u16 = 24,
@@ -82,6 +92,7 @@ pub const SessionHandle = struct {
     session: *Session,
     client_id: u64,
     manager: *SessionManager,
+    attach_trace: AttachTrace,
 
     pub fn deinit(self: *SessionHandle) void {
         self.manager.detach(self);
@@ -101,10 +112,16 @@ pub const Session = struct {
     clients: std.array_list.Managed(*ClientConn),
     clients_lock: std.Thread.Mutex,
     io_lock: std.Thread.Mutex,
+    trace_lock: std.Thread.Mutex,
     output_thread: std.Thread,
     thread_started: bool,
     alive: bool,
     queued_for_cleanup: bool,
+    created_at_ns: i128,
+    output_pump_started_ns: ?i128,
+    first_backend_read_ns: ?i128,
+    first_broadcast_ns: ?i128,
+    first_trace_sent: bool,
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -127,10 +144,16 @@ pub const Session = struct {
             .clients = std.array_list.Managed(*ClientConn).init(allocator),
             .clients_lock = .{},
             .io_lock = .{},
+            .trace_lock = .{},
             .output_thread = undefined,
             .thread_started = false,
             .alive = true,
             .queued_for_cleanup = false,
+            .created_at_ns = std.time.nanoTimestamp(),
+            .output_pump_started_ns = null,
+            .first_backend_read_ns = null,
+            .first_broadcast_ns = null,
+            .first_trace_sent = false,
         };
         return session;
     }
@@ -141,6 +164,9 @@ pub const Session = struct {
         if (self.thread_started) {
             return;
         }
+        self.trace_lock.lock();
+        self.output_pump_started_ns = std.time.nanoTimestamp();
+        self.trace_lock.unlock();
         self.output_thread = try std.Thread.spawn(.{}, outputPump, .{self});
         self.thread_started = true;
     }
@@ -161,10 +187,25 @@ pub const Session = struct {
                 continue;
             }
 
+            self.noteFirstBackendRead();
             self.clients_lock.lock();
             if (self.clients.items.len == 0) {
                 self.clients_lock.unlock();
                 continue;
+            }
+
+            if (self.consumeFirstOutputTrace()) |trace| {
+                var i_trace: usize = 0;
+                while (i_trace < self.clients.items.len) {
+                    const client = self.clients.items[i_trace];
+                    writeAttachTraceFrame(client.ws_fd, trace) catch {
+                        _ = posix.close(client.ws_fd);
+                        _ = self.clients.swapRemove(i_trace);
+                        self.allocator.destroy(client);
+                        continue;
+                    };
+                    i_trace += 1;
+                }
             }
 
             var i: usize = 0;
@@ -182,6 +223,51 @@ pub const Session = struct {
         }
 
         self.manager.markTerminated(self);
+    }
+
+    fn noteFirstBackendRead(self: *Session) void {
+        self.trace_lock.lock();
+        defer self.trace_lock.unlock();
+        if (self.first_backend_read_ns == null) {
+            self.first_backend_read_ns = std.time.nanoTimestamp();
+        }
+    }
+
+    fn buildAttachTrace(self: *Session, session_reused: bool) AttachTrace {
+        self.trace_lock.lock();
+        defer self.trace_lock.unlock();
+
+        const now_ns = std.time.nanoTimestamp();
+        return .{
+            .session_reused = session_reused,
+            .session_age_ms = nanosToMillis(now_ns - self.created_at_ns),
+            .output_pump_started_ms = if (self.output_pump_started_ns) |value| nanosToMillis(value - self.created_at_ns) else null,
+            .first_backend_read_ms = if (self.first_backend_read_ns) |value| nanosToMillis(value - self.created_at_ns) else null,
+            .first_broadcast_ms = if (self.first_broadcast_ns) |value| nanosToMillis(value - self.created_at_ns) else null,
+        };
+    }
+
+    fn consumeFirstOutputTrace(self: *Session) ?AttachTrace {
+        self.trace_lock.lock();
+        defer self.trace_lock.unlock();
+
+        if (self.first_trace_sent or self.first_backend_read_ns == null) {
+            return null;
+        }
+
+        if (self.first_broadcast_ns == null) {
+            self.first_broadcast_ns = std.time.nanoTimestamp();
+        }
+        self.first_trace_sent = true;
+
+        const now_ns = std.time.nanoTimestamp();
+        return .{
+            .session_reused = false,
+            .session_age_ms = nanosToMillis(now_ns - self.created_at_ns),
+            .output_pump_started_ms = if (self.output_pump_started_ns) |value| nanosToMillis(value - self.created_at_ns) else null,
+            .first_backend_read_ms = if (self.first_backend_read_ns) |value| nanosToMillis(value - self.created_at_ns) else null,
+            .first_broadcast_ms = if (self.first_broadcast_ns) |value| nanosToMillis(value - self.created_at_ns) else null,
+        };
     }
 
     pub fn writeInput(self: *Session, data: []const u8) !void {
@@ -272,6 +358,7 @@ pub const SessionManager = struct {
     lock: std.Thread.Mutex,
     next_client_id: u64,
     backend_mode: backends.BackendMode,
+    local_shell_startup: backends.LocalShellStartup,
     zmx_opts: backends.ZmxClientOptions,
     token_policy: TokenPolicy,
     backend_factory: BackendFactory,
@@ -281,6 +368,7 @@ pub const SessionManager = struct {
     pub fn init(
         allocator: std.mem.Allocator,
         backend_mode: backends.BackendMode,
+        local_shell_startup: backends.LocalShellStartup,
         zmx_opts: backends.ZmxClientOptions,
         token_policy: TokenPolicy,
     ) SessionManager {
@@ -291,6 +379,7 @@ pub const SessionManager = struct {
             .lock = .{},
             .next_client_id = 1,
             .backend_mode = backend_mode,
+            .local_shell_startup = local_shell_startup,
             .zmx_opts = zmx_opts,
             .token_policy = token_policy,
             .backend_factory = .{},
@@ -379,6 +468,7 @@ pub const SessionManager = struct {
             .session = session,
             .client_id = client_id,
             .manager = self,
+            .attach_trace = session.buildAttachTrace(selected != null),
         };
     }
 
@@ -426,9 +516,13 @@ pub const SessionManager = struct {
         self.lock.unlock();
     }
 
-    fn isAuthorized(self: *SessionManager, session_id: []const u8, token: ?[]const u8) bool {
-        if (self.authorizer.authorize_fn) |authorize| {
-            return authorize(self.authorizer.context, session_id, token);
+    pub fn authorize(self: *const SessionManager, session_id: []const u8, token: ?[]const u8) bool {
+        return self.isAuthorized(session_id, token);
+    }
+
+    fn isAuthorized(self: *const SessionManager, session_id: []const u8, token: ?[]const u8) bool {
+        if (self.authorizer.authorize_fn) |authorize_fn| {
+            return authorize_fn(self.authorizer.context, session_id, token);
         }
 
         return switch (self.token_policy.mode) {
@@ -544,6 +638,7 @@ pub const SessionManager = struct {
                 .cols = opts.cols,
                 .rows = opts.rows,
                 .command = opts.command,
+                .shell_startup = self.local_shell_startup,
             },
             self.zmx_opts,
         );
@@ -606,4 +701,43 @@ fn isValidSessionToken(session_id: []const u8, provided: []const u8, secret: []c
     const encoded = formatSessionTokenHex(session_id, secret, &expected) catch return false;
     if (provided.len != encoded.len) return false;
     return std.mem.eql(u8, provided, encoded);
+}
+
+fn nanosToMillis(value_ns: i128) u64 {
+    if (value_ns <= 0) return 0;
+    return @intCast(@divFloor(value_ns, std.time.ns_per_ms));
+}
+
+pub fn writeAttachTraceFrame(fd: posix.fd_t, trace: AttachTrace) !void {
+    var payload_buf: [256]u8 = undefined;
+    var output_buf: [320]u8 = undefined;
+    var output_stream = std.io.fixedBufferStream(&output_buf);
+    const writer = output_stream.writer();
+
+    var output_pump_buf: [32]u8 = undefined;
+    var backend_read_buf: [32]u8 = undefined;
+    var first_broadcast_buf: [32]u8 = undefined;
+
+    const payload = try std.fmt.bufPrint(
+        &payload_buf,
+        "{{\"type\":\"supaterm.attach-trace\",\"session_reused\":{s},\"session_age_ms\":{d},\"output_pump_started_ms\":{s},\"first_backend_read_ms\":{s},\"first_broadcast_ms\":{s}}}",
+        .{
+            if (trace.session_reused) "true" else "false",
+            trace.session_age_ms,
+            formatOptionalJsonU64(trace.output_pump_started_ms, &output_pump_buf),
+            formatOptionalJsonU64(trace.first_backend_read_ms, &backend_read_buf),
+            formatOptionalJsonU64(trace.first_broadcast_ms, &first_broadcast_buf),
+        },
+    );
+
+    try writer.writeAll(attach_trace_prefix);
+    try writer.writeAll(payload);
+    try ws_frames.writeFrame(fd, .text, output_stream.getWritten());
+}
+
+fn formatOptionalJsonU64(value: ?u64, buf: *[32]u8) []const u8 {
+    if (value) |num| {
+        return std.fmt.bufPrint(buf, "{d}", .{num}) catch "null";
+    }
+    return "null";
 }

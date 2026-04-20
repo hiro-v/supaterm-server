@@ -1,14 +1,10 @@
-import { test, expect, type Page } from '@playwright/test';
-
-const baseUrl = process.env.SUPATERM_BASE_URL ?? 'http://127.0.0.1:3000';
-
-async function openFreshWorkbench(page: Page) {
-  await page.goto(baseUrl);
-  await page.evaluate(() => {
-    window.localStorage.clear();
-  });
-  await page.reload();
-}
+import { test, expect } from '@playwright/test';
+import {
+  createBrowserSessionId,
+  openFreshWorkbench,
+  readPaneInfo,
+  runTerminalCommand,
+} from '../helpers/browser-workbench';
 
 test('workbench manages spaces tabs panes and lean chrome controls', async ({ page }) => {
   await openFreshWorkbench(page);
@@ -69,6 +65,8 @@ test('workbench manages spaces tabs panes and lean chrome controls', async ({ pa
   await expect(activePane.locator('.pane-toolbar')).not.toContainText('ws.');
   await activePane.getByRole('button', { name: 'Pane details' }).click();
   await expect(page.locator('.info-panel')).toContainText('Session');
+  await expect(page.locator('.info-panel')).toContainText('supaterm.neutral-green');
+  await expect(page.locator('.info-panel')).toContainText('supaterm.theme.neutral-green');
 });
 
 test('reload restores sidebar selection layout and names', async ({ page }) => {
@@ -88,6 +86,8 @@ test('reload restores sidebar selection layout and names', async ({ page }) => {
   await activePane.getByRole('button', { name: 'Rename pane' }).click();
   await page.locator('.overlay-panel .overlay-input').fill('Saved Pane');
   await page.keyboard.press('Enter');
+  await runTerminalCommand(page, "printf 'RELOAD_HYDRATION_OK\\n'");
+  await page.waitForTimeout(250);
 
   await page.getByRole('button', { name: 'Toggle sidebar' }).click();
   await expect(page.locator('.workbench-shell')).toHaveAttribute('data-sidebar-collapsed', 'true');
@@ -99,6 +99,72 @@ test('reload restores sidebar selection layout and names', async ({ page }) => {
   await expect(page.locator('.window-title')).toContainText('Persisted : Saved Tab');
   await expect(page.locator('.pane-card')).toHaveCount(2);
   await expect(page.locator('.pane-title').filter({ hasText: 'Saved Pane' })).toHaveCount(1);
+
+  const infoText = await readPaneInfo(page);
+  expect(infoText).toContain('Session ReusedEnabled');
+  expect(infoText).toContain('First Backend Read');
+});
+
+test('pane reconnects after websocket close and reuses the same session', async ({ page }) => {
+  await page.addInitScript(() => {
+    const NativeWebSocket = window.WebSocket;
+    const sockets: WebSocket[] = [];
+    class InstrumentedWebSocket extends NativeWebSocket {
+      constructor(url: string | URL, protocols?: string | string[]) {
+        super(url, protocols);
+        sockets.push(this);
+      }
+    }
+    window.WebSocket = InstrumentedWebSocket as typeof WebSocket;
+    (window as typeof window & { __supatermSockets?: WebSocket[] }).__supatermSockets = sockets;
+  });
+
+  await openFreshWorkbench(page);
+  await expect(page.locator(".pane-status[data-tone='connected']").first()).toContainText('Connected');
+
+  await page.evaluate(() => {
+    const sockets = (window as typeof window & { __supatermSockets?: WebSocket[] }).__supatermSockets ?? [];
+    sockets[0]?.close();
+  });
+
+  await expect(page.locator(".pane-status[data-tone='connected']").first()).toContainText('Connected');
+  await runTerminalCommand(page, "printf 'RECONNECT_OK\\n'");
+  await page.waitForTimeout(250);
+  const infoText = await readPaneInfo(page);
+  expect(infoText).toContain('RECONNECT_OK');
+});
+
+test('fresh browser restores the shared workbench snapshot from the server', async ({ browser, page }) => {
+  const sessionId = createBrowserSessionId('shared-workbench');
+  await openFreshWorkbench(page, sessionId);
+
+  await page.getByRole('button', { name: 'Add space' }).click();
+  await page.locator('.overlay-panel .overlay-input').fill('Shared');
+  await page.getByRole('button', { name: 'Create' }).click();
+
+  await page.getByRole('button', { name: 'New Tab' }).click();
+  await page.locator('.tab-card.active').getByRole('button', { name: /Rename/ }).click();
+  await page.locator('.overlay-panel .overlay-input').fill('Review');
+  await page.keyboard.press('Enter');
+  await page.getByRole('button', { name: 'Split down' }).click();
+  await page.locator(".pane-card[data-active='true']").first().getByRole('button', { name: 'Rename pane' }).click();
+  await page.locator('.overlay-panel .overlay-input').fill('Shared Pane');
+  await page.keyboard.press('Enter');
+
+  const secondContext = await browser.newContext();
+  const secondPage = await secondContext.newPage();
+  try {
+    await openFreshWorkbench(secondPage, sessionId);
+    await expect(secondPage.locator('.window-title')).toContainText('Shared : Review', { timeout: 3000 });
+    await expect(secondPage.locator('.pane-card')).toHaveCount(2);
+    await expect(secondPage.locator('.pane-title').filter({ hasText: 'Shared Pane' })).toHaveCount(1);
+
+    const infoText = await readPaneInfo(secondPage);
+    expect(infoText).toContain('Session ReusedEnabled');
+    expect(infoText).toContain('First Backend Read');
+  } finally {
+    await secondContext.close();
+  }
 });
 
 test('pane click focuses terminal input and sends typed data', async ({ page }) => {
@@ -136,4 +202,54 @@ test('pane click focuses terminal input and sends typed data', async ({ page }) 
   expect(result.sent).toContain('e');
   expect(result.sent).toContain('I');
   expect(result.sent).toContain('\r');
+});
+
+test('webgpu path does not duplicate typed terminal input', async ({ page }) => {
+  await page.addInitScript(() => {
+    const sent: string[] = [];
+    const originalSend = WebSocket.prototype.send;
+    WebSocket.prototype.send = function(data) {
+      try {
+        if (typeof data === 'string') {
+          sent.push(data);
+        }
+      } catch {
+        // Ignore instrumentation failures in the page context.
+      }
+      return originalSend.call(this, data);
+    };
+    (window as typeof window & { __supatermSent?: string[] }).__supatermSent = sent;
+  });
+
+  await openFreshWorkbench(page);
+  await page.waitForFunction(() => document.querySelector('.pane-status')?.textContent?.includes('Connected'));
+
+  await page.click('.pane-terminal canvas');
+  await page.waitForTimeout(80);
+  await page.keyboard.type('ab');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(250);
+
+  const result = await page.evaluate(() => {
+    const sent = (window as typeof window & { __supatermSent?: string[] }).__supatermSent ?? [];
+    return sent.filter((frame) => frame === 'a' || frame === 'b' || frame === '\r');
+  });
+
+  expect(result).toEqual(['a', 'b', '\r']);
+});
+
+test('pane details modal closes from close button and outside click', async ({ page }) => {
+  await openFreshWorkbench(page);
+  await page.waitForFunction(() => document.querySelector('.pane-status')?.textContent?.includes('Connected'));
+
+  const activePane = page.locator(".pane-card[data-active='true']").first();
+  await activePane.getByRole('button', { name: 'Pane details' }).click();
+  await expect(page.locator('.info-panel')).toBeVisible();
+  await page.getByRole('button', { name: 'Close dialog' }).click();
+  await expect(page.locator('.info-panel')).toHaveCount(0);
+
+  await activePane.getByRole('button', { name: 'Pane details' }).click();
+  await expect(page.locator('.info-panel')).toBeVisible();
+  await page.locator('.overlay-scrim').click({ position: { x: 8, y: 8 } });
+  await expect(page.locator('.info-panel')).toHaveCount(0);
 });

@@ -1,6 +1,23 @@
-import { LibghostyCanvasAdapter, type TerminalRendererAdapter } from './adapters';
+import {
+  LibghostyCanvasAdapter,
+  WebGpuPreferredAdapter,
+  type TerminalRendererAdapter,
+} from './adapters';
+import type {
+  BrowserRuntimeProfile,
+  TerminalVisualProfile,
+  WorkbenchChromeSurface,
+} from './contracts';
+import {
+  createDefaultVisualConfigSource,
+  type VisualConfigSource,
+} from './config';
+import {
+  createWorkbenchChromeSurface,
+  type ChromeSurfaceFactory,
+} from './chrome-surface';
 import { createTerminalVisualProfile } from './profile';
-import { detectBrowserRuntimeProfile, type BrowserRuntimeProfile } from './renderer';
+import { detectBrowserRuntimeProfile } from './renderer';
 
 export type LatencySnapshot = {
   latencyMs: number | null;
@@ -13,41 +30,73 @@ export type SharedLatencyProbe = {
 
 export type AppRuntime = {
   runtimeProfile: BrowserRuntimeProfile;
+  visualProfile: TerminalVisualProfile;
   latencyProbe: SharedLatencyProbe;
-  createRenderer(): TerminalRendererAdapter;
+  createRenderer(visualProfile?: TerminalVisualProfile): TerminalRendererAdapter;
+  createChromeSurface(): WorkbenchChromeSurface;
 };
 
 export type PaneRuntime = {
   runtimeProfile: BrowserRuntimeProfile;
+  visualProfile: TerminalVisualProfile;
   latencyProbe: SharedLatencyProbe;
   renderer: TerminalRendererAdapter;
 };
 
 let sharedAppRuntime: AppRuntime | null = null;
 
-export function getAppRuntime(): AppRuntime {
-  if (sharedAppRuntime) return sharedAppRuntime;
+export type AppRuntimeOptions = {
+  visualConfigSource?: VisualConfigSource;
+  chromeSurfaceFactory?: ChromeSurfaceFactory;
+  documentLike?: Document | null;
+  navigatorLike?: Navigator | null;
+};
 
-  const runtimeProfile = detectBrowserRuntimeProfile();
-  const profile = createTerminalVisualProfile(runtimeProfile);
-  const latencyProbe = createSharedLatencyProbe();
-
-  sharedAppRuntime = {
+export function createAppRuntime(options: AppRuntimeOptions = {}): AppRuntime {
+  const runtimeProfile = detectBrowserRuntimeProfile(
+    options.documentLike ?? document,
+    (options.navigatorLike ?? navigator) as Parameters<typeof detectBrowserRuntimeProfile>[1],
+  );
+  const visualProfile = createTerminalVisualProfile(
     runtimeProfile,
+    options.visualConfigSource ?? createDefaultVisualConfigSource(),
+  );
+  const latencyProbe = createSharedLatencyProbe();
+  const chromeSurfaceFactory = options.chromeSurfaceFactory ?? ((profile, navigatorLike) =>
+    createWorkbenchChromeSurface(profile, navigatorLike ?? navigator)
+  );
+
+  return {
+    runtimeProfile,
+    visualProfile,
     latencyProbe,
-    createRenderer() {
+    createRenderer(profile = visualProfile) {
+      if (profile.runtime.terminalRenderer === 'webgpu-experimental') {
+        return new WebGpuPreferredAdapter({ profile });
+      }
       return new LibghostyCanvasAdapter({ profile });
     },
+    createChromeSurface() {
+      return chromeSurfaceFactory(
+        visualProfile,
+        (options.navigatorLike ?? navigator) as Navigator,
+      );
+    },
   };
+}
 
+export function getAppRuntime(): AppRuntime {
+  if (sharedAppRuntime) return sharedAppRuntime;
+  sharedAppRuntime = createAppRuntime();
   return sharedAppRuntime;
 }
 
 export function createPaneRuntime(appRuntime: AppRuntime = getAppRuntime()): PaneRuntime {
   return {
     runtimeProfile: appRuntime.runtimeProfile,
+    visualProfile: appRuntime.visualProfile,
     latencyProbe: appRuntime.latencyProbe,
-    renderer: appRuntime.createRenderer(),
+    renderer: appRuntime.createRenderer(appRuntime.visualProfile),
   };
 }
 

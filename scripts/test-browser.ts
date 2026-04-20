@@ -8,12 +8,15 @@ const server = await startServer({
   backend: 'local',
   enableShareApi: true,
   tokenPolicy: 'open',
+  env: {
+    SHELL: '/bin/sh',
+  },
 });
 
 try {
   const child = spawn(
     'bunx',
-    ['playwright', 'test', 'tests/browser/workbench.browser.spec.ts', '--reporter=line'],
+    ['playwright', 'test', 'tests/browser', '--reporter=line'],
     {
       stdio: 'inherit',
       env: {

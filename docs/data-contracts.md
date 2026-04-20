@@ -15,6 +15,10 @@ Share grant:
 - `GET /api/sessions/{id}/share`
 - only available when `--enable-share-api` is enabled
 
+Workbench snapshot:
+- `GET /api/workbench/{id}`
+- `PUT /api/workbench/{id}`
+
 ## Canonical Session ID
 
 Session IDs are canonicalized at the HTTP boundary.
@@ -76,6 +80,18 @@ Current message split:
 - terminal payload: binary/text stream to and from the backend
 - control payload: JSON for small control messages such as resize
 
+Current attach control frame:
+```json
+{
+  "type": "supaterm.attach-trace",
+  "session_reused": true,
+  "session_age_ms": 1250,
+  "output_pump_started_ms": 0,
+  "first_backend_read_ms": 5,
+  "first_broadcast_ms": 5
+}
+```
+
 Current resize frame:
 ```json
 {
@@ -93,7 +109,29 @@ Current resize frame:
 
 ## Persistence Contract
 
-Browser workbench state persists locally and restores on reload:
+Browser workbench state now has two layers:
+- server-owned shared snapshot in SQLite
+- browser-local cache for fast startup and offline/error tolerance
+
+`GET /api/workbench/{id}` returns:
+
+```json
+{
+  "workbench_id": "shared.workbench:v1",
+  "updated_at_unix_ms": 1760000000000,
+  "state": {
+    "workspaces": [],
+    "activeWorkspaceId": "ws.1",
+    "sidebarCollapsed": false
+  }
+}
+```
+
+`PUT /api/workbench/{id}` accepts the raw `WorkbenchState` JSON object and returns `204 No Content`.
+
+Auth follows the same token policy as the session routes for the same canonical id.
+
+The shared snapshot contains:
 - workspaces
 - active workspace
 - tabs
@@ -103,4 +141,4 @@ Browser workbench state persists locally and restores on reload:
 - renamed titles
 - sidebar collapsed state
 
-This persistence is UI state only. Backend session continuity comes from the stable pane session IDs and the selected backend mode.
+Backend session continuity comes from the stable pane session IDs and the selected backend mode. For `zmx`, that is the intended fresh-browser restore path: fetch the shared workbench snapshot, rebuild the workspace/tab/pane layout, then reattach each pane to the same backend session id.

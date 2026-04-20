@@ -38,6 +38,7 @@ pub fn build(b: *std.Build) void {
         .root_module = exe_mod,
     });
     exe.linkLibC();
+    exe.linkSystemLibrary("sqlite3");
 
     const check = b.step("check", "Verify compilation");
     if (embed_assets) {

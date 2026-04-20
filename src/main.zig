@@ -21,17 +21,21 @@ const web_assets = if (build_options.embed_assets) @import("web_assets.zig") els
 const ws = @import("ws_frames.zig");
 const backends = @import("session_backends.zig");
 const session_http = @import("session_http.zig");
+const WorkbenchStore = @import("workbench_store.zig").WorkbenchStore;
 const SessionManager = @import("session_manager.zig").SessionManager;
 const TokenPolicy = @import("session_manager.zig").TokenPolicy;
 const TokenPolicyMode = @import("session_manager.zig").TokenPolicyMode;
 const ManagerError = @import("session_manager.zig").ManagerError;
 const Session = @import("session_manager.zig").Session;
+const writeAttachTraceFrame = @import("session_manager.zig").writeAttachTraceFrame;
 
 const ServerConfig = struct {
     listen: []const u8 = "127.0.0.1:3000",
     web_root: []const u8 = "web/dist",
+    sqlite_path: []const u8 = "supaterm-server.sqlite3",
     embed_assets: bool = build_options.embed_assets,
     backend: backends.BackendMode = .local,
+    shell_startup: backends.LocalShellStartup = .fast,
     zmx_socket_dir: ?[]const u8 = null,
     zmx_session_prefix: []const u8 = "",
     zmx_binary: []const u8 = "zmx",
@@ -47,11 +51,12 @@ const ConnContext = struct {
     stream: std.net.Server.Connection,
     config: ServerConfig,
     manager: *SessionManager,
+    workbench_store: *WorkbenchStore,
     allocator: std.mem.Allocator,
 };
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = true }){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -72,8 +77,13 @@ pub fn main() !void {
         .global_token = config.access_token,
         .share_secret = config.share_token_secret,
     };
-    var manager = SessionManager.init(allocator, config.backend, zmx_opts, token_policy);
+    var manager = SessionManager.init(allocator, config.backend, config.shell_startup, zmx_opts, token_policy);
     defer manager.deinit();
+    var workbench_store = WorkbenchStore.init(allocator, config.sqlite_path) catch |err| {
+        std.log.err("failed to open sqlite store \"{s}\": {s}", .{ config.sqlite_path, @errorName(err) });
+        return err;
+    };
+    defer workbench_store.deinit();
 
     const listen_addr = parseListenAddress(config.listen) catch |err| {
         std.log.err("invalid --listen value \"{s}\": {s}", .{ config.listen, @errorName(err) });
@@ -94,6 +104,7 @@ pub fn main() !void {
             .stream = conn,
             .config = config,
             .manager = &manager,
+            .workbench_store = &workbench_store,
             .allocator = allocator,
         };
 
@@ -138,6 +149,14 @@ fn parseConfig(allocator: std.mem.Allocator) !ServerConfig {
             cfg.backend = try parseBackendMode(arg[10..]);
             continue;
         }
+        if (std.mem.startsWith(u8, arg, "--sqlite-path=")) {
+            cfg.sqlite_path = arg[14..];
+            continue;
+        }
+        if (std.mem.startsWith(u8, arg, "--shell-startup=")) {
+            cfg.shell_startup = try parseShellStartup(arg[16..]);
+            continue;
+        }
         if (std.mem.startsWith(u8, arg, "--zmx-socket-dir=")) {
             cfg.zmx_socket_dir = arg[16..];
             continue;
@@ -179,6 +198,16 @@ fn parseConfig(allocator: std.mem.Allocator) !ServerConfig {
         if (std.mem.eql(u8, arg, "--backend")) {
             const value = args.next() orelse return error.MissingBackendValue;
             cfg.backend = try parseBackendMode(value);
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--sqlite-path")) {
+            const value = args.next() orelse return error.MissingSqlitePathValue;
+            cfg.sqlite_path = value;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--shell-startup")) {
+            const value = args.next() orelse return error.MissingShellStartupValue;
+            cfg.shell_startup = try parseShellStartup(value);
             continue;
         }
         if (std.mem.eql(u8, arg, "--zmx-socket-dir")) {
@@ -235,6 +264,11 @@ fn parseConfig(allocator: std.mem.Allocator) !ServerConfig {
     if (cfg.share_token_secret == null) {
         cfg.share_token_secret = std.posix.getenv("SUPATERM_SHARE_TOKEN_SECRET");
     }
+    if (std.mem.eql(u8, cfg.sqlite_path, "supaterm-server.sqlite3")) {
+        if (std.posix.getenv("SUPATERM_SQLITE_PATH")) |env_value| {
+            cfg.sqlite_path = env_value;
+        }
+    }
 
     if (!token_policy_explicit) {
         if (cfg.share_token_secret != null and cfg.share_token_secret.?.len > 0) {
@@ -253,6 +287,12 @@ fn parseBackendMode(raw: []const u8) !backends.BackendMode {
     return error.InvalidBackendMode;
 }
 
+fn parseShellStartup(raw: []const u8) !backends.LocalShellStartup {
+    if (std.mem.eql(u8, raw, "fast")) return .fast;
+    if (std.mem.eql(u8, raw, "full")) return .full;
+    return error.InvalidShellStartup;
+}
+
 fn parseTokenPolicyMode(raw: []const u8) !TokenPolicyMode {
     if (std.mem.eql(u8, raw, "open")) return .open;
     if (std.mem.eql(u8, raw, "global")) return .global;
@@ -264,6 +304,8 @@ fn printUsage() void {
     std.log.info("supaterm-server", .{});
     std.log.info("  --listen <addr:port>            default: 127.0.0.1:3000", .{});
     std.log.info("  --backend <local|zmx>           default: local", .{});
+    std.log.info("  --sqlite-path <path>            default: supaterm-server.sqlite3", .{});
+    std.log.info("  --shell-startup <fast|full>     default: fast", .{});
     std.log.info("  --web-root <path>               default: web/dist", .{});
     std.log.info("  --embed-assets                  include embedded asset mode", .{});
     std.log.info("  --zmx-socket-dir <path>         base socket directory for zmx", .{});
@@ -329,6 +371,107 @@ fn handleConnection(ctx: ConnContext) void {
     const query_start = std.mem.indexOfScalar(u8, target, '?');
     const request_path = if (query_start) |i| target[0..i] else target;
     const query = if (query_start) |i| target[i + 1 ..] else "";
+    var headers = readRequestHeaders(&reader, ctx.allocator) catch return;
+    defer headers.deinit(ctx.allocator);
+
+    if (session_http.extractWorkbenchId(request_path)) |raw_workbench_id| {
+        const workbench_id = session_http.canonicalizeSessionId(ctx.allocator, raw_workbench_id) catch {
+            writeStatus(io_writer, 400, "Bad Request", "text/plain", "Invalid workbench id") catch {};
+            io_writer.flush() catch {};
+            return;
+        };
+        defer ctx.allocator.free(workbench_id);
+
+        const request_token = headers.bearer_token orelse session_http.parseSessionOptions(query).token;
+        if (!ctx.manager.authorize(workbench_id, request_token)) {
+            writeStatus(io_writer, 403, "Forbidden", "text/plain", "Unauthorized") catch {};
+            io_writer.flush() catch {};
+            return;
+        }
+
+        if (std.mem.eql(u8, method, "GET")) {
+            var snapshot = ctx.workbench_store.loadSnapshot(ctx.allocator, workbench_id) catch {
+                writeStatus(io_writer, 500, "Server Error", "text/plain", "Failed to load workbench snapshot") catch {};
+                io_writer.flush() catch {};
+                return;
+            };
+            if (snapshot == null) {
+                writeStatus(io_writer, 404, "Not Found", "text/plain", "Not found") catch {};
+                io_writer.flush() catch {};
+                return;
+            }
+            defer snapshot.?.deinit(ctx.allocator);
+
+            var payload = session_http.WorkbenchSnapshotPayload.init(
+                ctx.allocator,
+                workbench_id,
+                snapshot.?.updated_at_unix_ms,
+                snapshot.?.state_json,
+            ) catch {
+                writeStatus(io_writer, 500, "Server Error", "text/plain", "Failed to build workbench snapshot") catch {};
+                io_writer.flush() catch {};
+                return;
+            };
+            defer payload.deinit(ctx.allocator);
+
+            const body = payload.toJson(ctx.allocator) catch {
+                writeStatus(io_writer, 500, "Server Error", "text/plain", "Failed to serialize workbench snapshot") catch {};
+                io_writer.flush() catch {};
+                return;
+            };
+            defer ctx.allocator.free(body);
+
+            writeStatus(io_writer, 200, "OK", "application/json", body) catch {};
+            io_writer.flush() catch {};
+            return;
+        }
+
+        if (std.mem.eql(u8, method, "PUT")) {
+            if (headers.invalid_content_length or headers.content_length == null) {
+                writeStatus(io_writer, 411, "Length Required", "text/plain", "Missing Content-Length") catch {};
+                io_writer.flush() catch {};
+                return;
+            }
+            if (headers.content_length.? > 512 * 1024) {
+                writeStatus(io_writer, 413, "Payload Too Large", "text/plain", "Payload too large") catch {};
+                io_writer.flush() catch {};
+                return;
+            }
+
+            const body = readRequestBody(&reader, ctx.allocator, headers.content_length.?) catch {
+                writeStatus(io_writer, 400, "Bad Request", "text/plain", "Invalid request body") catch {};
+                io_writer.flush() catch {};
+                return;
+            };
+            defer ctx.allocator.free(body);
+
+            var parsed = std.json.parseFromSlice(std.json.Value, ctx.allocator, body, .{}) catch {
+                writeStatus(io_writer, 400, "Bad Request", "text/plain", "Invalid JSON body") catch {};
+                io_writer.flush() catch {};
+                return;
+            };
+            defer parsed.deinit();
+            if (parsed.value != .object) {
+                writeStatus(io_writer, 400, "Bad Request", "text/plain", "Workbench snapshot must be a JSON object") catch {};
+                io_writer.flush() catch {};
+                return;
+            }
+
+            _ = ctx.workbench_store.saveSnapshot(workbench_id, body) catch {
+                writeStatus(io_writer, 500, "Server Error", "text/plain", "Failed to save workbench snapshot") catch {};
+                io_writer.flush() catch {};
+                return;
+            };
+
+            writeStatus(io_writer, 204, "No Content", "text/plain", "") catch {};
+            io_writer.flush() catch {};
+            return;
+        }
+
+        writeStatus(io_writer, 405, "Method Not Allowed", "text/plain", "Method Not Allowed") catch {};
+        io_writer.flush() catch {};
+        return;
+    }
 
     if (!std.mem.eql(u8, method, "GET")) {
         writeStatus(io_writer, 405, "Method Not Allowed", "text/plain", "Method Not Allowed") catch {};
@@ -438,38 +581,13 @@ fn handleConnection(ctx: ConnContext) void {
         };
         defer ctx.allocator.free(session_id);
 
-        var upgrade: bool = false;
-        var has_websocket = false;
-        var sec_key: ?[]const u8 = null;
-        var sec_key_owned: ?[]u8 = null;
-        defer if (sec_key_owned) |owned| ctx.allocator.free(owned);
-
-        while (true) {
-            const line = readTrimmedLine(&reader, ctx.allocator) catch break;
-            if (line.len == 0) break;
-            defer ctx.allocator.free(line);
-
-            const header = parseHeader(line);
-            if (header == null) continue;
-            const h = header.?;
-            if (ieq(h.name, "Upgrade")) {
-                upgrade = containsTokenCaseInsensitive(h.value, "websocket");
-            } else if (ieq(h.name, "Connection")) {
-                has_websocket = containsTokenCaseInsensitive(h.value, "Upgrade");
-            } else if (ieq(h.name, "Sec-WebSocket-Key")) {
-                if (sec_key_owned) |owned| ctx.allocator.free(owned);
-                sec_key_owned = ctx.allocator.dupe(u8, h.value) catch return;
-                sec_key = sec_key_owned.?;
-            }
-        }
-
-        if (!(upgrade and has_websocket)) {
+        if (!(headers.upgrade_websocket and headers.connection_upgrade)) {
             writeStatus(io_writer, 400, "Bad Request", "text/plain", "Expected websocket upgrade") catch {};
             io_writer.flush() catch {};
             return;
         }
 
-        const key = sec_key orelse {
+        const key = headers.sec_websocket_key orelse {
             writeStatus(io_writer, 400, "Bad Request", "text/plain", "Missing Sec-WebSocket-Key") catch {};
             io_writer.flush() catch {};
             return;
@@ -497,6 +615,7 @@ fn handleConnection(ctx: ConnContext) void {
 
         writeWsHandshake(io_writer, accept) catch {};
         io_writer.flush() catch {};
+        writeAttachTraceFrame(ctx.stream.stream.handle, handle.attach_trace) catch {};
 
         close_stream = false;
         websocketLoop(ctx.allocator, handle.session, ctx.stream.stream.handle) catch {};
@@ -509,6 +628,21 @@ fn handleConnection(ctx: ConnContext) void {
 
 const Header = struct { name: []const u8, value: []const u8 };
 
+const RequestHeaders = struct {
+    upgrade_websocket: bool = false,
+    connection_upgrade: bool = false,
+    sec_websocket_key: ?[]u8 = null,
+    content_length: ?usize = null,
+    invalid_content_length: bool = false,
+    bearer_token: ?[]u8 = null,
+
+    pub fn deinit(self: *RequestHeaders, allocator: std.mem.Allocator) void {
+        if (self.sec_websocket_key) |value| allocator.free(value);
+        if (self.bearer_token) |value| allocator.free(value);
+        self.* = undefined;
+    }
+};
+
 fn parseHeader(line: []const u8) ?Header {
     const idx = std.mem.indexOfScalar(u8, line, ':') orelse return null;
     const name = std.mem.trim(u8, line[0..idx], " \t\r\n");
@@ -517,11 +651,65 @@ fn parseHeader(line: []const u8) ?Header {
     return .{ .name = name, .value = value };
 }
 
+fn readRequestHeaders(reader: anytype, allocator: std.mem.Allocator) !RequestHeaders {
+    var headers = RequestHeaders{};
+    errdefer headers.deinit(allocator);
+
+    while (true) {
+        const line = try readTrimmedLine(reader, allocator);
+        defer allocator.free(line);
+        if (line.len == 0) break;
+
+        const parsed = parseHeader(line) orelse continue;
+        if (ieq(parsed.name, "Upgrade")) {
+            headers.upgrade_websocket = containsTokenCaseInsensitive(parsed.value, "websocket");
+        } else if (ieq(parsed.name, "Connection")) {
+            headers.connection_upgrade = containsTokenCaseInsensitive(parsed.value, "Upgrade");
+        } else if (ieq(parsed.name, "Sec-WebSocket-Key")) {
+            if (headers.sec_websocket_key) |value| allocator.free(value);
+            headers.sec_websocket_key = try allocator.dupe(u8, parsed.value);
+        } else if (ieq(parsed.name, "Content-Length")) {
+            headers.content_length = std.fmt.parseInt(usize, parsed.value, 10) catch blk: {
+                headers.invalid_content_length = true;
+                break :blk null;
+            };
+        } else if (ieq(parsed.name, "Authorization")) {
+            if (parseBearerToken(parsed.value)) |token| {
+                if (headers.bearer_token) |value| allocator.free(value);
+                headers.bearer_token = try allocator.dupe(u8, token);
+            }
+        }
+    }
+
+    return headers;
+}
+
+fn parseBearerToken(value: []const u8) ?[]const u8 {
+    if (value.len < 7) return null;
+    if (!std.ascii.eqlIgnoreCase(value[0..6], "Bearer")) return null;
+    if (value[6] != ' ') return null;
+    const token = std.mem.trim(u8, value[7..], " \t\r\n");
+    if (token.len == 0) return null;
+    return token;
+}
+
 fn readTrimmedLine(reader: anytype, allocator: std.mem.Allocator) ![]u8 {
     const raw = (reader.interface().takeDelimiter('\n') catch return error.EndOfStream) orelse return error.EndOfStream;
     const trimmed = std.mem.trimRight(u8, raw, "\r\n");
     const copied = try allocator.dupe(u8, trimmed);
     return copied;
+}
+
+fn readRequestBody(reader: anytype, allocator: std.mem.Allocator, content_length: usize) ![]u8 {
+    const body = try allocator.alloc(u8, content_length);
+    errdefer allocator.free(body);
+    var filled: usize = 0;
+    while (filled < body.len) {
+        const amount = try reader.interface().readSliceShort(body[filled..]);
+        if (amount == 0) return error.EndOfStream;
+        filled += amount;
+    }
+    return body;
 }
 
 fn writeStatus(

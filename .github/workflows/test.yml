@@ -78,3 +78,111 @@ jobs:
           install-playwright: "true"
 
       - run: bun run test:browser
+
+  perf:
+    name: perf report (ubuntu-latest)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Compute cache key inputs
+        id: cache_key
+        shell: bash
+        run: |
+          echo "libghostty=$(git rev-parse HEAD:third_party/libghostty/ghostty)" >> "$GITHUB_OUTPUT"
+          echo "zmx=$(git rev-parse HEAD:third_party/zmx)" >> "$GITHUB_OUTPUT"
+
+      - uses: ./.github/actions/setup-ci
+        with:
+          cache-key-suffix: ${{ hashFiles('bun.lock', 'package.json', '.gitmodules', 'zlint.json', 'patches/libghosty/libghosty.patch', 'patches/zmx/zmx.patch') }}-${{ steps.cache_key.outputs.libghostty }}-${{ steps.cache_key.outputs.zmx }}
+          install-playwright: "true"
+
+      - name: Resolve perf baseline source
+        id: perf_baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline_path=".agent-harness/artifacts/perf-baseline.base.json"
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ -n "${{ github.base_ref }}" ]; then
+            git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+            if git show "origin/${{ github.base_ref }}:.agent-harness/artifacts/perf-baseline.json" > "$baseline_path"; then
+              echo "baseline_source=origin/${{ github.base_ref }}" >> "$GITHUB_OUTPUT"
+            else
+              cp .agent-harness/artifacts/perf-baseline.json "$baseline_path"
+              echo "baseline_source=working-tree-fallback" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            cp .agent-harness/artifacts/perf-baseline.json "$baseline_path"
+            echo "baseline_source=working-tree" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Collect perf current report
+        shell: bash
+        run: |
+          SUPATERM_PERF_SAMPLES=1 bun run perf:current
+
+      - name: Check perf budgets
+        shell: bash
+        run: |
+          SUPATERM_PERF_SAMPLES=1 \
+          SUPATERM_PERF_BASELINE_PATH=.agent-harness/artifacts/perf-baseline.base.json \
+          bun run perf:check
+
+      - name: Append perf summary
+        shell: bash
+        run: |
+          bun --eval '
+            import { readFileSync, appendFileSync } from "node:fs";
+            const report = JSON.parse(readFileSync(".agent-harness/artifacts/perf-check.json", "utf8"));
+            const formatTrend = (trend) => {
+              if (trend?.current == null) return "n/a";
+              const delta = trend.delta == null ? "n/a" : `${trend.delta > 0 ? "+" : ""}${trend.delta}${trend.unit}`;
+              const deltaPct = trend.deltaPct == null ? "" : ` (${trend.deltaPct > 0 ? "+" : ""}${trend.deltaPct}%)`;
+              return `${trend.current}${trend.unit} vs ${trend.baseline}${trend.unit} (${delta}${deltaPct})`;
+            };
+            const lines = [
+              "## Perf Report",
+              "",
+              `- baseline source: ${process.env.PERF_BASELINE_SOURCE}`,
+              `- shell-ready: ${formatTrend(report.comparisons.shellReadyMs)}`,
+              `- workbench mounted: ${formatTrend(report.comparisons.startup.workbenchMountedMs)}`,
+              `- renderer ready: ${formatTrend(report.comparisons.startup.rendererReadyMs)}`,
+              `- websocket open: ${formatTrend(report.comparisons.startup.websocketOpenMs)}`,
+              `- first terminal bytes: ${formatTrend(report.comparisons.startup.firstTerminalBytesMs)}`,
+              `- first canvas: ${formatTrend(report.comparisons.firstTerminalCanvasMs)}`,
+              `- first connected: ${formatTrend(report.comparisons.firstPaneConnectedMs)}`,
+              `- first connected mark: ${formatTrend(report.comparisons.startup.firstPaneConnectedMarkMs)}`,
+              `- server output pump: ${formatTrend(report.comparisons.startup.serverOutputPumpStartedMs)}`,
+              `- server first backend read: ${formatTrend(report.comparisons.startup.serverFirstBackendReadMs)}`,
+              `- server first broadcast: ${formatTrend(report.comparisons.startup.serverFirstBroadcastMs)}`,
+              `- four-pane layout: ${formatTrend(report.comparisons.fourPaneLayoutMs)}`,
+              `- four-pane connected: ${formatTrend(report.comparisons.fourPaneConnectedMs)}`,
+              `- renderer frame CPU avg: ${formatTrend(report.comparisons.renderer.frameCpuAvgMs)}`,
+              `- renderer atlas resets: ${formatTrend(report.comparisons.renderer.atlasResetCount)}`,
+              `- rect buffer capacity: ${formatTrend(report.comparisons.renderer.rectBufferCapacityBytes)}`,
+              `- glyph buffer capacity: ${formatTrend(report.comparisons.renderer.glyphBufferCapacityBytes)}`,
+              `- renderer upload bytes: ${formatTrend(report.comparisons.renderer.uploadBytes)}`,
+              "",
+              "### Perf Budget Results",
+              ...report.results.map((result) => `- ${result.passed ? "PASS" : "FAIL"} ${result.name}: ${result.details}`),
+            ];
+            appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
+          '
+        env:
+          PERF_BASELINE_SOURCE: ${{ steps.perf_baseline.outputs.baseline_source }}
+
+      - name: Upload perf report artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-report
+          path: |
+            .agent-harness/artifacts/perf-baseline.base.json
+            .agent-harness/artifacts/perf-current.json
+            .agent-harness/artifacts/perf-check.json
+          if-no-files-found: error

@@ -125,6 +125,43 @@ pub const ShareGrantPayload = struct {
     }
 };
 
+pub const WorkbenchSnapshotPayload = struct {
+    workbench_id: []const u8,
+    updated_at_unix_ms: i64,
+    state_json: []const u8,
+
+    pub fn init(
+        allocator: std.mem.Allocator,
+        workbench_id: []const u8,
+        updated_at_unix_ms: i64,
+        state_json: []const u8,
+    ) !WorkbenchSnapshotPayload {
+        return .{
+            .workbench_id = try allocator.dupe(u8, workbench_id),
+            .updated_at_unix_ms = updated_at_unix_ms,
+            .state_json = try allocator.dupe(u8, state_json),
+        };
+    }
+
+    pub fn deinit(self: *WorkbenchSnapshotPayload, allocator: std.mem.Allocator) void {
+        allocator.free(self.workbench_id);
+        allocator.free(self.state_json);
+        self.* = undefined;
+    }
+
+    pub fn toJson(self: WorkbenchSnapshotPayload, allocator: std.mem.Allocator) ![]u8 {
+        return std.fmt.allocPrint(
+            allocator,
+            "{{\"workbench_id\":\"{s}\",\"updated_at_unix_ms\":{d},\"state\":{s}}}",
+            .{
+                self.workbench_id,
+                self.updated_at_unix_ms,
+                self.state_json,
+            },
+        );
+    }
+};
+
 pub fn extractSessionWsId(path: []const u8) ?[]const u8 {
     if (std.mem.eql(u8, path, "/ws")) return "default";
     const prefix = "/api/sessions/";
@@ -154,6 +191,14 @@ pub fn extractSessionShareId(path: []const u8) ?[]const u8 {
     const end = path.len - "/share".len;
     if (start >= end) return "default";
     return path[start..end];
+}
+
+pub fn extractWorkbenchId(path: []const u8) ?[]const u8 {
+    const prefix = "/api/workbench/";
+    if (!std.mem.startsWith(u8, path, prefix)) return null;
+    const raw = path[prefix.len..];
+    if (raw.len == 0) return "default";
+    return raw;
 }
 
 pub fn canonicalizeSessionId(allocator: std.mem.Allocator, raw: []const u8) ![]u8 {

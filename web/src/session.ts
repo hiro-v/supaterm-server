@@ -10,6 +10,22 @@ export type SessionConnectionDetails = {
   token: string | null;
 };
 
+export type ApiIdentity = {
+  id: string;
+  token: string | null;
+};
+
+export type SessionAttachTrace = {
+  type: 'supaterm.attach-trace';
+  session_reused: boolean;
+  session_age_ms: number;
+  output_pump_started_ms: number | null;
+  first_backend_read_ms: number | null;
+  first_broadcast_ms: number | null;
+};
+
+export const SESSION_CONTROL_PREFIX = '\x1e';
+
 type SessionMetadata = {
   session_id: string;
   token_policy: string;
@@ -65,6 +81,17 @@ export function buildSessionWebSocketUrl(
   return `${protocol}://${currentLocation.host}/api/sessions/${pathSession}/ws?${query.toString()}`;
 }
 
+export function buildServerApiUrl(currentLocation: Location, pathname: string): string {
+  return `${currentLocation.protocol}//${currentLocation.host}${pathname}`;
+}
+
+export function buildAuthorizedHeaders(token: string | null): HeadersInit | undefined {
+  if (!token) return undefined;
+  return {
+    Authorization: `Bearer ${token}`,
+  };
+}
+
 export async function decodeTerminalMessage(data: unknown): Promise<string> {
   if (typeof data === 'string') {
     return data;
@@ -79,6 +106,30 @@ export async function decodeTerminalMessage(data: unknown): Promise<string> {
   }
 
   return '';
+}
+
+export function parseSessionControlMessage(text: string): SessionAttachTrace | null {
+  if (!text.startsWith(SESSION_CONTROL_PREFIX)) {
+    return null;
+  }
+
+  const payload = text.slice(SESSION_CONTROL_PREFIX.length);
+  try {
+    const parsed = JSON.parse(payload) as Partial<SessionAttachTrace>;
+    if (parsed.type !== 'supaterm.attach-trace') {
+      return null;
+    }
+    return {
+      type: 'supaterm.attach-trace',
+      session_reused: parsed.session_reused === true,
+      session_age_ms: Number(parsed.session_age_ms ?? 0),
+      output_pump_started_ms: parsed.output_pump_started_ms == null ? null : Number(parsed.output_pump_started_ms),
+      first_backend_read_ms: parsed.first_backend_read_ms == null ? null : Number(parsed.first_backend_read_ms),
+      first_broadcast_ms: parsed.first_broadcast_ms == null ? null : Number(parsed.first_broadcast_ms),
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function resolveSessionToken(
@@ -103,7 +154,7 @@ export async function resolveSessionToken(
 }
 
 async function getSessionMetadata(currentLocation: Location, sessionId: string): Promise<SessionMetadata> {
-  const response = await fetch(buildSessionUrl(currentLocation, `/api/sessions/${encodeURIComponent(sessionId)}`));
+  const response = await fetch(buildServerApiUrl(currentLocation, `/api/sessions/${encodeURIComponent(sessionId)}`));
   if (!response.ok) {
     throw new Error(`Failed to load session metadata (${response.status})`);
   }
@@ -111,13 +162,9 @@ async function getSessionMetadata(currentLocation: Location, sessionId: string):
 }
 
 async function getShareGrant(currentLocation: Location, sessionId: string): Promise<ShareGrant> {
-  const response = await fetch(buildSessionUrl(currentLocation, `/api/sessions/${encodeURIComponent(sessionId)}/share`));
+  const response = await fetch(buildServerApiUrl(currentLocation, `/api/sessions/${encodeURIComponent(sessionId)}/share`));
   if (!response.ok) {
     throw new Error(`Failed to load share grant (${response.status})`);
   }
   return await response.json() as ShareGrant;
-}
-
-function buildSessionUrl(currentLocation: Location, pathname: string): string {
-  return `${currentLocation.protocol}//${currentLocation.host}${pathname}`;
 }

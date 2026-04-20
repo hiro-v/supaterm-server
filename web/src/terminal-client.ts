@@ -1,16 +1,15 @@
-import {
-  buildSessionWebSocketUrl,
-  decodeTerminalMessage,
-  resolveSessionToken,
-  type SessionConnectionDetails,
-} from './session';
-import { createPaneRuntime } from './runtime/runtime';
+import { type SessionConnectionDetails } from './session';
+import { markSupatermPerf, updateSupatermAttachTrace } from './perf';
+import { createPaneRuntime, type AppRuntime } from './runtime/runtime';
+import { TerminalSessionConnection } from './terminal-session';
+import { createLocalStorageTerminalHydrationStore, type TerminalHydrationStore } from './terminal-hydration';
 
 export type TerminalPaneClientOptions = {
   mount: HTMLDivElement;
   statsLabel: HTMLSpanElement;
   status: HTMLSpanElement;
   session: SessionConnectionDetails;
+  hydrationStore?: TerminalHydrationStore;
 };
 
 export type PaneTelemetry = {
@@ -18,11 +17,46 @@ export type PaneTelemetry = {
   latencyMs: number | null;
   sessionId: string;
   runtimeProfileId: string;
+  visualProfileId: string;
+  themeId: string;
   activeRenderer: string;
   requestedRenderer: string;
   rendererFallbackReason: string | null;
+  rendererMetricsMode: 'gpu-active' | 'fallback-canvas';
+  rendererMetricsNote: string | null;
   webgpuApi: boolean;
   webgl2: boolean;
+  activeBuffer: 'normal' | 'alternate' | 'unavailable';
+  cursorX: number | null;
+  cursorY: number | null;
+  cursorVisible: boolean | null;
+  cols: number;
+  rows: number;
+  scrollbackLength: number;
+  viewportY: number;
+  wrappedRowCount: number;
+  bracketedPaste: boolean;
+  focusEvents: boolean;
+  mouseTracking: boolean;
+  sgrMouseMode: boolean;
+  viewportPreview: string[];
+  styledCellCount: number;
+  atlasGlyphEntries: number | null;
+  atlasWidth: number | null;
+  atlasHeight: number | null;
+  atlasResetCount: number | null;
+  activeGlyphQuads: number | null;
+  activeRects: number | null;
+  rectBufferCapacityBytes: number | null;
+  glyphBufferCapacityBytes: number | null;
+  uploadBytes: number | null;
+  frameCpuMs: number | null;
+  frameCpuAvgMs: number | null;
+  sessionReused: boolean | null;
+  sessionAgeMs: number | null;
+  outputPumpStartedMs: number | null;
+  firstBackendReadMs: number | null;
+  firstBroadcastMs: number | null;
 };
 
 export class TerminalPaneClient {
@@ -30,9 +64,10 @@ export class TerminalPaneClient {
   private readonly statsLabel: HTMLSpanElement;
   private readonly status: HTMLSpanElement;
   private readonly session: SessionConnectionDetails;
-  private readonly runtime = createPaneRuntime();
+  private readonly runtime;
+  private readonly hydrationStore: TerminalHydrationStore;
 
-  private socket: WebSocket | null = null;
+  private connection: TerminalSessionConnection | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private unsubscribeLatencyProbe: (() => void) | null = null;
   private disposed = false;
@@ -40,82 +75,48 @@ export class TerminalPaneClient {
   private focusTimer: number | null = null;
   private animationFrame: number | null = null;
   private pendingResizeFrame: number | null = null;
+  private reconnectTimer: number | null = null;
   private queuedResize: { cols: number; rows: number } | null = null;
   private lastSentResize: { cols: number; rows: number } | null = null;
+  private reconnectAttempts = 0;
+  private startPromise: Promise<void> | null = null;
   private fpsWindowStart = 0;
   private fpsFrames = 0;
   private fps: number | null = null;
   private latencyMs: number | null = null;
+  private sessionReused: boolean | null = null;
+  private sessionAgeMs: number | null = null;
+  private outputPumpStartedMs: number | null = null;
+  private firstBackendReadMs: number | null = null;
+  private firstBroadcastMs: number | null = null;
+  private rendererReady = false;
+  private rendererBridged = false;
+  private hydratedRenderer = false;
+  private pendingOutput = '';
+  private pendingRefit = false;
 
-  constructor(options: TerminalPaneClientOptions) {
+  constructor(options: TerminalPaneClientOptions, appRuntime?: AppRuntime) {
     this.mount = options.mount;
     this.statsLabel = options.statsLabel;
     this.status = options.status;
     this.session = options.session;
+    this.runtime = createPaneRuntime(appRuntime);
+    this.hydrationStore = options.hydrationStore ?? createLocalStorageTerminalHydrationStore();
     this.latencyMs = this.runtime.latencyProbe.getSnapshot().latencyMs;
     this.renderTelemetry();
   }
 
   async start(): Promise<void> {
-    await this.runtime.renderer.start();
-    if (this.disposed || this.socket) return;
-
-    const token = await resolveSessionToken(window.location, this.session);
     if (this.disposed) return;
+    if (this.startPromise) {
+      await this.startPromise;
+      return;
+    }
 
-    this.runtime.renderer.mount(this.mount);
-    this.attachFocusBridge();
-
-    this.socket = new WebSocket(
-      buildSessionWebSocketUrl(
-        window.location,
-        this.session.sessionId,
-        token,
-        this.runtime.renderer.cols,
-        this.runtime.renderer.rows,
-      ),
-    );
-
-    this.socket.addEventListener('open', () => {
-      this.setStatus('Connected', 'connected');
-      this.startTelemetry();
-      this.lastSentResize = null;
-      this.refit();
+    this.startPromise = this.startInternal().finally(() => {
+      this.startPromise = null;
     });
-
-    this.socket.addEventListener('close', () => {
-      this.setStatus('Closed', 'closed');
-      this.stopTelemetry();
-      this.runtime.renderer.write('\r\n\x1b[33mSession closed\x1b[0m\r\n');
-    });
-
-    this.socket.addEventListener('error', () => {
-      this.setStatus('Error', 'error');
-    });
-
-    this.socket.addEventListener('message', async (event: MessageEvent) => {
-      const text = await decodeTerminalMessage(event.data);
-      if (text.length > 0) {
-        this.runtime.renderer.write(text);
-      }
-    });
-
-    this.runtime.renderer.onData((data: string) => {
-      if (this.socket?.readyState === WebSocket.OPEN) {
-        this.socket.send(data);
-      }
-    });
-
-    this.runtime.renderer.onResize(({ cols, rows }: { cols: number; rows: number }) => {
-      this.queueResize(cols, rows);
-    });
-
-    this.resizeObserver = new ResizeObserver(() => {
-      this.refit();
-    });
-    this.resizeObserver.observe(this.mount);
-    this.setStatus('Connecting…', 'connecting');
-    this.focusInput();
+    await this.startPromise;
   }
 
   activate(): void {
@@ -128,10 +129,12 @@ export class TerminalPaneClient {
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
 
-    if (this.socket && this.socket.readyState <= WebSocket.OPEN) {
-      this.socket.close();
+    this.connection?.dispose();
+    this.connection = null;
+    if (this.reconnectTimer != null) {
+      window.clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
     }
-    this.socket = null;
     this.detachFocusBridge();
     this.stopTelemetry();
     if (this.focusTimer !== null) {
@@ -142,14 +145,69 @@ export class TerminalPaneClient {
       window.cancelAnimationFrame(this.pendingResizeFrame);
       this.pendingResizeFrame = null;
     }
+    this.startPromise = null;
     this.runtime.renderer.dispose();
   }
 
+  private async startInternal(): Promise<void> {
+    if (!this.rendererReady) {
+      this.setStatus('Connecting…', 'connecting');
+      const connectPromise = this.openConnection();
+      await this.runtime.renderer.start();
+      if (this.disposed) return;
+
+      this.runtime.renderer.mount(this.mount);
+      this.attachFocusBridge();
+      this.rendererReady = true;
+      markSupatermPerf('renderer-ready');
+      this.attachRendererBridges();
+      this.flushPendingOutput();
+      if (this.pendingRefit) {
+        this.pendingRefit = false;
+        this.refit();
+      }
+      await connectPromise.catch(() => {
+        if (!this.disposed) {
+          this.scheduleReconnect();
+        }
+      });
+    } else if (!this.connection) {
+      this.setStatus(this.reconnectAttempts > 0 ? 'Reconnecting…' : 'Connecting…', 'connecting');
+      await this.openConnection().catch(() => {
+        if (!this.disposed) {
+          this.scheduleReconnect();
+        }
+      });
+    }
+
+    if (this.resizeObserver == null) {
+      this.resizeObserver = new ResizeObserver(() => {
+        this.refit();
+      });
+      this.resizeObserver.observe(this.mount);
+    }
+    this.focusInput();
+  }
+
+  private attachRendererBridges(): void {
+    if (this.rendererBridged) return;
+    this.rendererBridged = true;
+    this.runtime.renderer.onData((data: string) => {
+      this.connection?.sendInput(data);
+    });
+    this.runtime.renderer.onResize(({ cols, rows }: { cols: number; rows: number }) => {
+      this.queueResize(cols, rows);
+    });
+  }
+
   private refit(): void {
-    if (!this.mount.isConnected) return;
+    if (!this.rendererReady || !this.mount.isConnected) {
+      this.pendingRefit = true;
+      return;
+    }
 
     queueMicrotask(() => {
-      if (!this.mount.isConnected) return;
+      if (!this.rendererReady || !this.mount.isConnected) return;
       this.runtime.renderer.fit();
       this.queueResize(this.runtime.renderer.cols, this.runtime.renderer.rows);
     });
@@ -161,16 +219,52 @@ export class TerminalPaneClient {
   }
 
   getTelemetry(): PaneTelemetry {
+    const diagnostics = this.runtime.renderer.getDiagnostics();
     return {
       fps: this.fps,
       latencyMs: this.latencyMs,
       sessionId: this.session.sessionId,
       runtimeProfileId: this.runtime.runtimeProfile.id,
+      visualProfileId: this.runtime.visualProfile.id,
+      themeId: this.runtime.visualProfile.themeId,
       activeRenderer: this.runtime.renderer.descriptor.activeRenderer,
       requestedRenderer: this.runtime.renderer.descriptor.requestedRenderer,
       rendererFallbackReason: this.runtime.renderer.descriptor.fallbackReason,
+      rendererMetricsMode: diagnostics.rendererMetricsMode,
+      rendererMetricsNote: diagnostics.rendererMetricsNote,
       webgpuApi: this.runtime.runtimeProfile.webgpuApi,
       webgl2: this.runtime.runtimeProfile.webgl2,
+      activeBuffer: diagnostics.activeBuffer,
+      cursorX: diagnostics.cursorX,
+      cursorY: diagnostics.cursorY,
+      cursorVisible: diagnostics.cursorVisible,
+      cols: diagnostics.cols,
+      rows: diagnostics.rows,
+      scrollbackLength: diagnostics.scrollbackLength,
+      viewportY: diagnostics.viewportY,
+      wrappedRowCount: diagnostics.wrappedRowCount,
+      bracketedPaste: diagnostics.bracketedPaste,
+      focusEvents: diagnostics.focusEvents,
+      mouseTracking: diagnostics.mouseTracking,
+      sgrMouseMode: diagnostics.sgrMouseMode,
+      viewportPreview: diagnostics.viewportPreview,
+      styledCellCount: diagnostics.styledCellCount,
+      atlasGlyphEntries: diagnostics.atlasGlyphEntries,
+      atlasWidth: diagnostics.atlasWidth,
+      atlasHeight: diagnostics.atlasHeight,
+      atlasResetCount: diagnostics.atlasResetCount,
+      activeGlyphQuads: diagnostics.activeGlyphQuads,
+      activeRects: diagnostics.activeRects,
+      rectBufferCapacityBytes: diagnostics.rectBufferCapacityBytes,
+      glyphBufferCapacityBytes: diagnostics.glyphBufferCapacityBytes,
+      uploadBytes: diagnostics.uploadBytes,
+      frameCpuMs: diagnostics.frameCpuMs,
+      frameCpuAvgMs: diagnostics.frameCpuAvgMs,
+      sessionReused: this.sessionReused,
+      sessionAgeMs: this.sessionAgeMs,
+      outputPumpStartedMs: this.outputPumpStartedMs,
+      firstBackendReadMs: this.firstBackendReadMs,
+      firstBroadcastMs: this.firstBroadcastMs,
     };
   }
 
@@ -179,6 +273,116 @@ export class TerminalPaneClient {
     this.mount.addEventListener('pointerdown', this.handleFocusIntent);
     this.mount.addEventListener('click', this.handleFocusIntent);
     this.focusHandlerBound = true;
+  }
+
+  private async openConnection(): Promise<void> {
+    if (this.disposed || this.connection) return;
+    this.setStatus(this.reconnectAttempts > 0 ? 'Reconnecting…' : 'Connecting…', 'connecting');
+    this.connection = new TerminalSessionConnection({
+      session: this.session,
+      onOpen: () => {
+        this.reconnectAttempts = 0;
+        if (this.reconnectTimer != null) {
+          window.clearTimeout(this.reconnectTimer);
+          this.reconnectTimer = null;
+        }
+        this.setStatus('Connected', 'connected');
+        markSupatermPerf('first-pane-connected');
+        this.startTelemetry();
+        this.lastSentResize = null;
+        if (this.rendererReady) {
+          this.refit();
+        } else {
+          this.pendingRefit = true;
+        }
+      },
+      onSocketOpen: () => {
+        markSupatermPerf('websocket-open');
+      },
+      onClose: () => {
+        this.connection = null;
+        this.stopTelemetry();
+        if (this.disposed) {
+          this.setStatus('Closed', 'closed');
+          return;
+        }
+        this.scheduleReconnect();
+      },
+      onError: () => {
+        if (!this.disposed) {
+          this.setStatus('Reconnecting…', 'connecting');
+        } else {
+          this.setStatus('Error', 'error');
+        }
+      },
+      onText: (text) => {
+        this.hydrationStore.append(this.session.sessionId, text);
+        if (!this.rendererReady) {
+          this.pendingOutput += text;
+          return;
+        }
+        this.runtime.renderer.write(text);
+      },
+      onFirstText: () => {
+        markSupatermPerf('first-terminal-bytes');
+      },
+      onAttachTrace: (trace) => {
+        this.sessionReused = trace.session_reused;
+        this.sessionAgeMs = trace.session_age_ms;
+        this.outputPumpStartedMs = trace.output_pump_started_ms;
+        this.firstBackendReadMs = trace.first_backend_read_ms;
+        this.firstBroadcastMs = trace.first_broadcast_ms;
+        updateSupatermAttachTrace({
+          sessionReused: trace.session_reused,
+          sessionAgeMs: trace.session_age_ms,
+          outputPumpStartedMs: trace.output_pump_started_ms,
+          firstBackendReadMs: trace.first_backend_read_ms,
+          firstBroadcastMs: trace.first_broadcast_ms,
+        });
+      },
+    });
+    try {
+      await this.connection.connect({
+        cols: this.runtime.renderer.cols,
+        rows: this.runtime.renderer.rows,
+      });
+    } catch (error) {
+      this.connection = null;
+      throw error;
+    }
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer != null || this.disposed) return;
+    const delayMs = Math.min(200 * (2 ** this.reconnectAttempts), 2_000);
+    this.reconnectAttempts += 1;
+    this.setStatus('Reconnecting…', 'connecting');
+    this.reconnectTimer = window.setTimeout(() => {
+      this.reconnectTimer = null;
+      void this.openConnection().catch(() => {
+        if (!this.disposed) {
+          this.scheduleReconnect();
+        }
+      });
+    }, delayMs);
+  }
+
+  private hydrateFromStore(): void {
+    if (this.hydratedRenderer) return;
+    this.hydratedRenderer = true;
+    const snapshot = this.hydrationStore.read(this.session.sessionId);
+    if (!snapshot) return;
+    this.runtime.renderer.write(snapshot);
+  }
+
+  private flushPendingOutput(): void {
+    if (!this.rendererReady) return;
+    if (this.pendingOutput.length === 0) return;
+    if (!this.hydratedRenderer) {
+      this.hydrateFromStore();
+    }
+    this.runtime.renderer.write(this.pendingOutput);
+    this.pendingOutput = '';
   }
 
   private detachFocusBridge(): void {
@@ -261,12 +465,11 @@ export class TerminalPaneClient {
   }
 
   private sendResizeIfNeeded(cols: number, rows: number): void {
-    if (this.socket?.readyState !== WebSocket.OPEN) return;
     if (this.lastSentResize?.cols === cols && this.lastSentResize.rows === rows) {
       return;
     }
     this.lastSentResize = { cols, rows };
-    this.socket.send(JSON.stringify({ type: 'resize', cols, rows }));
+    this.connection?.resize(cols, rows);
   }
 
   private renderTelemetry(): void {

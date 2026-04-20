@@ -16,6 +16,12 @@ zig build run
 zig build check
 ```
 
+Local PTY shell startup:
+```bash
+zig build run -- --shell-startup fast
+zig build run -- --shell-startup full
+```
+
 Web:
 ```bash
 bun run web:typecheck
@@ -30,24 +36,45 @@ bun run test:integration
 bun run test:contract
 bun run test:e2e
 bun run test:browser
+bun run perf:baseline
+bun run perf:current
 ```
 
 `test:browser` is self-contained. It boots a temporary local server, exports its base URL to Playwright, and shuts the server down after the browser run.
 Before it boots the server, it also runs `bun run web:build` so clean runners always have `web/dist`.
+It now also covers reconnect and hydration behavior, including reload/session reuse, fresh-browser shared snapshot restore, stable pane-session reattach, and browser socket reconnect after an explicit close.
 
 Component-focused coverage in `test:unit` now includes:
 - workbench state transforms
 - workbench command generation
+- workbench handler wiring
 - workbench persistence
 - workbench sidebar rendering
 - workbench overlay rendering
+- terminal hydration storage
 - workbench pane-tree rendering through injected pane clients
 - vendor patch workflow scripts for `libghosty` and `zmx`
+
+`test:e2e` now also covers `zmx` reconnect reuse across websocket disconnects so the persistent backend path is exercised directly.
 
 Proof:
 ```bash
 bun run harness
 ```
+
+Performance baseline:
+- collector: [scripts/perf-baseline.ts](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/scripts/perf-baseline.ts)
+- checked-in summary: [docs/performance-baseline.md](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/docs/performance-baseline.md)
+- current-run artifact: `.agent-harness/artifacts/perf-current.json`
+- budget report artifact: `.agent-harness/artifacts/perf-check.json`
+- CI base-branch baseline artifact: `.agent-harness/artifacts/perf-baseline.base.json`
+- CI step summary includes current-vs-baseline deltas plus atlas resets and rect/glyph buffer capacities from the current run
+- current startup drift can be broken down further through browser-side marks captured by `scripts/perf-baseline.ts`
+  - `workbench-mounted`
+  - `renderer-ready`
+  - `websocket-open`
+  - `first-terminal-bytes`
+  - `first-pane-connected`
 
 Local hooks:
 ```bash
@@ -142,6 +169,7 @@ Current CI policy:
 - restore Bun, Zig, build, and Playwright caches through the shared setup action
 - provision `zlint` in CI and export `ZLINT_BIN` for the repo lint script
 - checkout submodules recursively so vendored `ghostty` and `zmx` source are present before any build/test step
+- publish a non-blocking Ubuntu perf base/current/check artifact set and step summary, resolving the PR base branch baseline when available before running `bun run perf:check`
 - keep the `tip` prerelease channel aligned with `main` by force-moving the `tip` tag and refreshing the GitHub prerelease assets
 
 ## Git Discipline

@@ -19,6 +19,10 @@
   --warning: #efba6f;
   --danger: #eb8b8b;
   --shadow: 0 28px 80px rgba(0, 0, 0, 0.48);
+  --chrome-shell-bg: #090909;
+  --chrome-shell-bg-alt: #121215;
+  --chrome-shell-glow: #7db3ff;
+  --chrome-shell-grid: #1a212a;
   font-family: 'Iosevka Term', 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
 }
 
@@ -61,14 +65,28 @@ body.is-resizing .split-handle.column {
 }
 
 .workbench-shell {
+  position: relative;
   display: grid;
   grid-template-columns: 308px minmax(0, 1fr);
   min-height: calc(100vh - 24px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 18px;
   overflow: hidden;
-  background: #0c0c0d;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--chrome-shell-glow) 8%, transparent), transparent 24%),
+    linear-gradient(180deg, var(--chrome-shell-bg-alt) 0%, var(--chrome-shell-bg) 100%);
   box-shadow: var(--shadow);
+}
+
+.workbench-chrome-surface {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.72;
 }
 
 .workbench-shell[data-sidebar-collapsed='true'] {
@@ -76,6 +94,8 @@ body.is-resizing .split-handle.column {
 }
 
 .sidebar-shell {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -335,6 +355,8 @@ body.is-resizing .split-handle.column {
 }
 
 .workbench-main {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-width: 0;
@@ -343,7 +365,7 @@ body.is-resizing .split-handle.column {
   gap: 6px;
   background:
     radial-gradient(circle at top left, rgba(255, 255, 255, 0.015), transparent 24%),
-    linear-gradient(180deg, #0b0b0c 0%, #09090a 100%);
+    linear-gradient(180deg, color-mix(in srgb, var(--chrome-shell-bg-alt) 88%, black) 0%, color-mix(in srgb, var(--chrome-shell-bg) 94%, black) 100%);
 }
 
 .workbench-header {
@@ -579,6 +601,7 @@ body.is-resizing .split-handle.column {
 }
 
 .pane-terminal {
+  position: relative;
   min-width: 0;
   min-height: 0;
   height: 100%;
@@ -589,6 +612,24 @@ body.is-resizing .split-handle.column {
 .pane-terminal canvas {
   width: 100%;
   height: 100%;
+}
+
+.pane-terminal-webgpu > .webgpu-terminal-fallback-host,
+.pane-terminal-webgpu > .webgpu-terminal-surface {
+  position: absolute;
+  inset: 4px 8px 8px;
+}
+
+.webgpu-terminal-fallback-host {
+  opacity: 0;
+}
+
+.webgpu-terminal-fallback-host.is-visible-fallback {
+  opacity: 1;
+}
+
+.webgpu-terminal-surface {
+  pointer-events: none;
 }
 
 .footer-status {
@@ -605,6 +646,7 @@ body.is-resizing .split-handle.column {
   position: fixed;
   inset: 0;
   pointer-events: none;
+  z-index: 2;
 }
 
 .overlay-scrim {
@@ -623,15 +665,38 @@ body.is-resizing .split-handle.column {
   display: grid;
   gap: 14px;
   padding: 18px;
+  max-height: calc(100vh - 48px);
   border: 1px solid var(--border-strong);
   border-radius: 18px;
   background: linear-gradient(180deg, rgba(28, 28, 31, 0.98), rgba(18, 18, 20, 0.98));
   box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.overlay-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .overlay-heading {
   font-size: 16px;
   font-weight: 700;
+}
+
+.overlay-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
 }
 
 .overlay-input {
@@ -663,6 +728,18 @@ body.is-resizing .split-handle.column {
   gap: 10px;
 }
 
+.info-panel {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.info-body {
+  display: grid;
+  gap: 14px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
 .info-row {
   display: flex;
   align-items: center;
@@ -681,6 +758,31 @@ body.is-resizing .split-handle.column {
 .info-row code {
   color: var(--text);
   font: inherit;
+}
+
+.info-preview {
+  display: grid;
+  gap: 8px;
+}
+
+.info-preview-label {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.info-preview-content {
+  margin: 0;
+  max-height: min(28vh, 220px);
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .overlay-button.primary {

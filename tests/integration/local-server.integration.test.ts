@@ -1,4 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import os from 'node:os';
+import path from 'node:path';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import {
   computeSessionShareToken,
   openTerminalSession,
@@ -17,6 +20,9 @@ describe('local backend integration', () => {
       enableShareApi: true,
       tokenPolicy: 'session',
       shareTokenSecret: shareSecret,
+      env: {
+        SHELL: '/bin/sh',
+      },
     });
   });
 
@@ -56,11 +62,11 @@ describe('local backend integration', () => {
       port: server.port,
       sessionId: idleSessionId,
       token: computeSessionShareToken(idleSessionId, shareSecret),
-      command: "printf '__LOCAL_IDLE_OK__\\n'",
+      command: "printf 'LOCAL_IDLE_OK\\n'",
       delayBeforeCommandMs: 750,
     });
 
-    expect(transcript).toContain('__LOCAL_IDLE_OK__');
+    expect(transcript).toContain('LOCAL_IDLE_OK');
   });
 
   test('spawns shells with a real color terminal environment', async () => {
@@ -76,5 +82,62 @@ describe('local backend integration', () => {
     expect(transcript).toContain('TERM=xterm-256color');
     expect(transcript).toContain('COLORTERM=truecolor');
     expect(transcript).toContain('TERM_PROGRAM=supaterm-web');
+    expect(transcript).toContain('TERM_PROGRAM_VERSION=0.1.0');
+    expect(transcript).toContain('CLICOLOR=1');
   }, 8_000);
+
+  test('uses fast shell startup by default but can opt into full shell init', async () => {
+    const homeDir = mkdtempSync(path.join(os.tmpdir(), 'supaterm-shell-startup-'));
+    writeFileSync(path.join(homeDir, '.bashrc'), "printf '__SUPATERM_BASHRC__\\n'\n");
+
+    const fastServer = await startServer({
+      backend: 'local',
+      enableShareApi: true,
+      tokenPolicy: 'session',
+      shareTokenSecret: shareSecret,
+      env: {
+        HOME: homeDir,
+        SHELL: '/bin/bash',
+      },
+    });
+
+    const fullServer = await startServer({
+      backend: 'local',
+      enableShareApi: true,
+      tokenPolicy: 'session',
+      shareTokenSecret: shareSecret,
+      extraArgs: ['--shell-startup', 'full'],
+      env: {
+        HOME: homeDir,
+        SHELL: '/bin/bash',
+      },
+    });
+
+    try {
+      const fastSessionId = `${sessionId}.shell.fast`;
+      const fastTranscript = await openTerminalSession({
+        port: fastServer.port,
+        sessionId: fastSessionId,
+        token: computeSessionShareToken(fastSessionId, shareSecret),
+        timeoutMs: 1_200,
+        resolveOnTimeout: true,
+      });
+
+      const fullSessionId = `${sessionId}.shell.full`;
+      const fullTranscript = await openTerminalSession({
+        port: fullServer.port,
+        sessionId: fullSessionId,
+        token: computeSessionShareToken(fullSessionId, shareSecret),
+        timeoutMs: 1_200,
+        resolveOnTimeout: true,
+      });
+
+      expect(fastTranscript).not.toContain('__SUPATERM_BASHRC__');
+      expect(fullTranscript).toContain('__SUPATERM_BASHRC__');
+    } finally {
+      await fastServer.stop();
+      await fullServer.stop();
+      rmSync(homeDir, { recursive: true, force: true });
+    }
+  }, 10_000);
 });

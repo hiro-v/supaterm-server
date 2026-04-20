@@ -1,5 +1,6 @@
 import { TerminalPaneClient, type PaneTelemetry, type TerminalPaneClientOptions } from '../terminal-client';
 import type { SessionConnectionDetails } from '../session';
+import type { AppRuntime } from '../runtime/runtime';
 import { listPaneIds, type PaneLeaf, type PaneNode, type TabState, type WorkspaceState } from './state';
 import { iconMarkup } from './shared';
 
@@ -70,12 +71,15 @@ function renderPaneNode(
       resolveSessionConnection,
     );
     view.title.textContent = node.title;
-    view.root.dataset.active = String(node.id === tab.activePaneId);
+    const isActive = node.id === tab.activePaneId;
+    view.root.dataset.active = String(isActive);
     void view.client.start().catch((error: unknown) => {
       view.status.textContent = error instanceof Error ? error.message : 'Failed';
       view.status.dataset.tone = 'error';
     });
-    view.client.activate();
+    if (isActive) {
+      view.client.activate();
+    }
     return view.root;
   }
 
@@ -156,6 +160,6 @@ function ensurePaneView(
   return view;
 }
 
-export function createDefaultPaneClientFactory(): PaneClientFactory {
-  return (options) => new TerminalPaneClient(options);
+export function createDefaultPaneClientFactory(appRuntime?: AppRuntime): PaneClientFactory {
+  return (options) => new TerminalPaneClient(options, appRuntime);
 }

@@ -1,15 +1,8 @@
+import type { BrowserRuntimeProfile } from './contracts';
+
 export type BrowserRendererCapabilities = {
   webgpuApi: boolean;
   webgl2: boolean;
-};
-
-export type BrowserRuntimeProfile = {
-  id: string;
-  terminalRenderer: 'libghosty-canvas';
-  preferredRenderer: 'webgpu';
-  webgpuApi: boolean;
-  webgl2: boolean;
-  rendererReadiness: 'webgpu-ready' | 'canvas-only';
 };
 
 type DocumentLike = {

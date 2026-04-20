@@ -4,7 +4,7 @@ import {
   detectBrowserRendererCapabilities,
 } from '../../web/src/runtime/renderer';
 import { createTerminalVisualProfile } from '../../web/src/runtime/profile';
-import { createPaneRuntime } from '../../web/src/runtime/runtime';
+import { createAppRuntime, createPaneRuntime } from '../../web/src/runtime/runtime';
 
 describe('browser runtime profile', () => {
   test('builds a webgpu-ready runtime profile when WebGPU is exposed', () => {
@@ -46,6 +46,7 @@ describe('browser runtime profile', () => {
     );
 
     expect(visualProfile.id).toBe('supaterm.neutral-green');
+    expect(visualProfile.themeId).toBe('supaterm.theme.neutral-green');
     expect(visualProfile.runtime.rendererReadiness).toBe('canvas-only');
     expect(visualProfile.theme.background).toBe('#101319');
     expect(visualProfile.fontFamily).toContain('JetBrains Mono');
@@ -76,9 +77,54 @@ describe('browser runtime profile', () => {
     try {
       const runtime = createPaneRuntime();
       expect(runtime.runtimeProfile.rendererReadiness).toBe('webgpu-ready');
+      expect(runtime.visualProfile.id).toBe('supaterm.neutral-green');
+      expect(runtime.renderer.descriptor.id).toBe('supaterm.renderer.libghosty-canvas');
       expect(runtime.renderer.descriptor.activeRenderer).toBe('libghosty-canvas');
+      expect(runtime.renderer.descriptor.transport).toBe('canvas');
       expect(runtime.renderer.descriptor.requestedRenderer).toBe('webgpu');
-      expect(runtime.renderer.descriptor.fallbackReason).toContain('WebGPU renderer is not implemented yet');
+      expect(runtime.renderer.descriptor.fallbackReason).toContain('WebGPU terminal renderer remains experimental');
+      expect(runtime.renderer.descriptor.visualProfileId).toBe('supaterm.neutral-green');
+      expect(runtime.renderer.descriptor.themeId).toBe('supaterm.theme.neutral-green');
+    } finally {
+      Object.defineProperty(globalThis, 'document', { configurable: true, value: originalDocument });
+      Object.defineProperty(globalThis, 'navigator', { configurable: true, value: originalNavigator });
+    }
+  });
+
+  test('reports explicit fallback diagnostics when WebGPU is unavailable', () => {
+    const originalDocument = globalThis.document;
+    const originalNavigator = globalThis.navigator;
+
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      value: {
+        createElement() {
+          return {
+            getContext(kind: string) {
+              return kind === 'webgl2' ? { ok: true } : null;
+            },
+          };
+        },
+      },
+    });
+
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: {},
+    });
+
+    try {
+      const appRuntime = createAppRuntime();
+      const renderer = appRuntime.createRenderer(appRuntime.visualProfile);
+      const diagnostics = renderer.getDiagnostics();
+
+      expect(renderer.descriptor.activeRenderer).toBe('libghosty-canvas');
+      expect(renderer.descriptor.fallbackReason).toContain('WebGPU terminal renderer remains experimental');
+      expect(diagnostics.rendererMetricsMode).toBe('fallback-canvas');
+      expect(diagnostics.rendererMetricsNote).toBe('WebGPU renderer metrics unavailable on canvas fallback.');
+      expect(diagnostics.atlasGlyphEntries).toBeNull();
+      expect(diagnostics.rectBufferCapacityBytes).toBeNull();
+      renderer.dispose();
     } finally {
       Object.defineProperty(globalThis, 'document', { configurable: true, value: originalDocument });
       Object.defineProperty(globalThis, 'navigator', { configurable: true, value: originalNavigator });

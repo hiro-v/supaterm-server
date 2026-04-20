@@ -5,6 +5,7 @@ import process from 'node:process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createHmac } from 'node:crypto';
+import { parseSessionControlMessage, type SessionAttachTrace } from '../../web/src/session';
 
 const root = process.cwd();
 const serverBinary = path.join(root, 'zig-out', 'bin', 'supaterm-server');
@@ -29,6 +30,7 @@ export type StartServerOptions = {
   tokenPolicy?: 'open' | 'global' | 'session';
   accessToken?: string;
   shareTokenSecret?: string;
+  sqlitePath?: string;
   zmxSocketDir?: string;
   extraArgs?: string[];
   env?: NodeJS.ProcessEnv;
@@ -63,11 +65,17 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
   await ensureServerBuilt();
 
   const port = await reservePort();
+  const tempDir = options.sqlitePath == null
+    ? mkdtempSync(path.join(os.tmpdir(), 'supaterm-server-runtime-'))
+    : null;
+  const sqlitePath = options.sqlitePath ?? path.join(tempDir!, 'supaterm-server.sqlite3');
   const args = [
     '--listen',
     `127.0.0.1:${port}`,
     '--backend',
     options.backend ?? 'local',
+    '--sqlite-path',
+    sqlitePath,
   ];
 
   if (options.enableShareApi) args.push('--enable-share-api');
@@ -117,6 +125,9 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
     stop: async () => {
       child.kill('SIGTERM');
       await waitForExit(child);
+      if (tempDir) {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
     },
   };
 }
@@ -141,10 +152,27 @@ export async function openTerminalSession(options: {
   sessionId: string;
   token?: string | null;
   command?: string;
+  completionMarker?: string;
   startupCommand?: string;
   timeoutMs?: number;
   delayBeforeCommandMs?: number;
+  resolveOnTimeout?: boolean;
 }): Promise<string> {
+  const result = await openTerminalSessionWithTrace(options);
+  return result.transcript;
+}
+
+export async function openTerminalSessionWithTrace(options: {
+  port: number;
+  sessionId: string;
+  token?: string | null;
+  command?: string;
+  completionMarker?: string;
+  startupCommand?: string;
+  timeoutMs?: number;
+  delayBeforeCommandMs?: number;
+  resolveOnTimeout?: boolean;
+}): Promise<{ transcript: string; attachTrace: SessionAttachTrace | null }> {
   const query = new URLSearchParams({
     cols: '80',
     rows: '24',
@@ -160,11 +188,12 @@ export async function openTerminalSession(options: {
 
     const decoder = new TextDecoder();
     let transcript = '';
+    let attachTrace: SessionAttachTrace | null = null;
     let settled = false;
-    const marker = '__SUPATERM_TEST_DONE__';
+    const marker = options.completionMarker ?? '__SUPATERM_TEST_DONE__';
     const timeout = setTimeout(() => {
-      if (options.startupCommand && !options.command) {
-        done(() => resolve(transcript));
+      if (options.resolveOnTimeout || (options.startupCommand && !options.command)) {
+        done(() => resolve({ transcript, attachTrace }));
         return;
       }
       done(() => reject(new Error(`websocket test timed out\n${transcript}`)));
@@ -185,8 +214,9 @@ export async function openTerminalSession(options: {
         return;
       }
       const sendCommand = () => {
-        // Clear any partially-edited shell line before sending scripted input.
-        ws.send(`\u0015${options.command}; printf '${marker}\\n'\r`);
+        // Clear any partially-edited shell line and interrupt any transient shell mode
+        // before sending scripted input.
+        ws.send(`\u0003\u0015${options.command}; printf '${marker}\\n'\r`);
       };
       const delayMs = options.delayBeforeCommandMs ?? 0;
       if (delayMs > 0) {
@@ -197,9 +227,17 @@ export async function openTerminalSession(options: {
     });
 
     ws.addEventListener('message', (event) => {
-      transcript += decodeMessage(event.data, decoder);
+      const decoded = decodeMessage(event.data, decoder);
+      const control = parseSessionControlMessage(decoded);
+      if (control) {
+        if (control.type === 'supaterm.attach-trace') {
+          attachTrace = control;
+        }
+        return;
+      }
+      transcript += decoded;
       if (transcript.includes(marker)) {
-        done(() => resolve(transcript));
+        done(() => resolve({ transcript, attachTrace }));
       }
     });
 
@@ -210,7 +248,7 @@ export async function openTerminalSession(options: {
     ws.addEventListener('close', () => {
       if (!settled) {
         if (options.startupCommand && !options.command) {
-          done(() => resolve(transcript));
+          done(() => resolve({ transcript, attachTrace }));
           return;
         }
         done(() => reject(new Error(`websocket closed early\n${transcript}`)));

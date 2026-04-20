@@ -28,7 +28,13 @@ export function escapeAttribute(value: string): string {
   return escapeHtml(value);
 }
 
-export function formatMetric(value: number | null | undefined, unit: string): string {
+export function formatMetric(
+  value: number | null | undefined,
+  unit: string,
+  options: { precision?: number } = {},
+): string {
   if (value == null || !Number.isFinite(value)) return `-- ${unit}`;
-  return `${Math.round(value)} ${unit}`;
+  const precision = options.precision ?? 0;
+  const rounded = precision > 0 ? value.toFixed(precision) : String(Math.round(value));
+  return `${rounded} ${unit}`;
 }

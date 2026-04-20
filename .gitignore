@@ -17,3 +17,4 @@ third_party/libghostty/dist/
 .DS_Store
 .turbo/
 .tooling/
+*.sqlite3
