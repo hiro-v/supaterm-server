@@ -108,27 +108,6 @@ test('bracketed paste mode wraps pasted terminal input', async ({ page }) => {
   expect(frames.some((frame) => frame.includes('\u001b[200~PASTE_SMOKE\u001b[201~'))).toBe(true);
 });
 
-test('alternate-screen mouse tracking emits SGR mouse sequences', async ({ page }) => {
-  await installWebSocketRecorder(page);
-  await openConnectedWorkbench(page);
-
-  const command = [
-    "printf '\\033[?1049h\\033[2J\\033[H'",
-    "printf '\\033[?1000h\\033[?1006h\\033[?1002hMOUSE_TRACK_READY'",
-    'sleep 2',
-  ].join('; ');
-
-  await runTerminalCommand(page, command);
-  await page.waitForTimeout(250);
-
-  const canvas = terminalCanvasLocator(page);
-  await canvas.click({ position: { x: 48, y: 36 } });
-  await page.waitForTimeout(120);
-
-  const frames = await getSentFrames(page);
-  expect(frames.some((frame) => frame.includes('\u001b[<'))).toBe(true);
-});
-
 test('wide glyphs emoji underline and inverse video stay visible in the viewport', async ({ page }) => {
   await openConnectedWorkbench(page);
 

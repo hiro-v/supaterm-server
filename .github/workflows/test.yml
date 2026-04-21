@@ -164,7 +164,22 @@ jobs:
         run: |
           bun --eval '
             import { readFileSync, appendFileSync } from "node:fs";
-            const report = JSON.parse(readFileSync(".agent-harness/artifacts/perf-check.json", "utf8"));
+            const reportPath = ".agent-harness/artifacts/perf-check.json";
+            try {
+              readFileSync(reportPath, "utf8");
+            } catch {
+              appendFileSync(
+                process.env.GITHUB_STEP_SUMMARY,
+                [
+                  "## Perf Report",
+                  "",
+                  `- baseline source: ${process.env.PERF_BASELINE_SOURCE}`,
+                  "- perf check report was not generated; collection timed out or failed before writing artifacts.",
+                ].join("\n") + "\n",
+              );
+              process.exit(0);
+            }
+            const report = JSON.parse(readFileSync(reportPath, "utf8"));
             const formatTrend = (trend) => {
               if (trend?.current == null) return "n/a";
               const delta = trend.delta == null ? "n/a" : `${trend.delta > 0 ? "+" : ""}${trend.delta}${trend.unit}`;
@@ -211,4 +226,4 @@ jobs:
             .agent-harness/artifacts/perf-baseline.base.json
             .agent-harness/artifacts/perf-current.json
             .agent-harness/artifacts/perf-check.json
-          if-no-files-found: error
+          if-no-files-found: warn

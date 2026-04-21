@@ -46,6 +46,7 @@ describe('CI and hook configuration', () => {
     expect(workflow).toContain('actions/upload-artifact@v7');
     expect(workflow).toContain('GITHUB_STEP_SUMMARY');
     expect(workflow).toContain('PERF_BASELINE_SOURCE');
+    expect(workflow).toContain('perf check report was not generated; collection timed out or failed before writing artifacts.');
     expect(workflow).toContain('formatTrend(report.comparisons.shellReadyMs)');
     expect(workflow).toContain('formatTrend(report.comparisons.startup.workbenchMountedMs)');
     expect(workflow).toContain('formatTrend(report.comparisons.startup.rendererReadyMs)');
@@ -59,6 +60,7 @@ describe('CI and hook configuration', () => {
     expect(workflow).toContain('.agent-harness/artifacts/perf-baseline.base.json');
     expect(workflow).toContain('.agent-harness/artifacts/perf-current.json');
     expect(workflow).toContain('.agent-harness/artifacts/perf-check.json');
+    expect(workflow).toContain('if-no-files-found: warn');
     expect(workflow).toContain('renderer atlas resets');
     expect(workflow).toContain('rect buffer capacity');
     expect(workflow).toContain('glyph buffer capacity');
