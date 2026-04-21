@@ -629,6 +629,7 @@ fn handleConnection(ctx: ConnContext) void {
 
         writeWsHandshake(io_writer, accept) catch {};
         io_writer.flush() catch {};
+        handle.session.startOutputPump() catch {};
         writeAttachTraceFrame(ctx.stream.stream.handle, handle.attach_trace) catch {};
 
         close_stream = false;

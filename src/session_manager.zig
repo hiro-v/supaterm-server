@@ -456,7 +456,6 @@ pub const SessionManager = struct {
             const session_id = try self.allocator.dupe(u8, raw_session_id);
             const created = try Session.init(self.allocator, self, session_id, opts);
             errdefer created.destroy();
-            try created.startOutputPump();
             try self.sessions.put(session_id, created);
             break :blk created;
         };
