@@ -4,20 +4,7 @@ const base64 = std.base64;
 const crypto = std.crypto;
 const build_options = @import("build_options");
 const parse_utils = @import("parse_utils.zig");
-const EmbeddedAssets = struct {
-    pub const has_embedded_assets = false;
-    pub const WebAsset = struct {
-        path: []const u8,
-        data: []const u8,
-        content_type: []const u8,
-    };
-    pub fn find(path: []const u8) ?WebAsset {
-        _ = path;
-        return null;
-    }
-};
-
-const web_assets = if (build_options.embed_assets) @import("web_assets.zig") else EmbeddedAssets;
+const web_assets = @import("embedded_web_assets");
 const ws = @import("ws_frames.zig");
 const backends = @import("session_backends.zig");
 const session_http = @import("session_http.zig");

@@ -13,5 +13,6 @@ Toolchain default:
 - run `mise trust mise.toml && mise install` before bootstrap or verification on a fresh machine
 - prefer `mise exec -- bun ...` and `mise exec -- zig ...` over assuming system `bun`/`zig`
 - prefer the unified `mise run setup`, `mise run dev`, `mise run check`, and `mise run release` tasks when they match the job
+- for local Linux parity on macOS, prefer `bun run docker:linux:check` or `bun run docker:linux:test`
 
 The matching `.claude` path is a symlink to this folder so other agent tooling can reuse the same source of truth.

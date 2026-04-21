@@ -1,0 +1,26 @@
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PATH=/root/.local/bin:/root/.cargo/bin:/root/.bun/bin:${PATH}
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      bash \
+      build-essential \
+      ca-certificates \
+      curl \
+      file \
+      git \
+      libsqlite3-dev \
+      pkg-config \
+      python3 \
+      unzip \
+      xz-utils \
+      zip && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL https://mise.run | sh
+
+WORKDIR /workspace
+
+CMD ["bash"]

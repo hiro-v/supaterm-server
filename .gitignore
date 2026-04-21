@@ -4,6 +4,7 @@ zig-out/
 *.log
 *.tmp
 .agent-harness/artifacts/*
+!.agent-harness/artifacts/perf-baseline.json
 coverage/
 dist/
 test-results/

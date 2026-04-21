@@ -107,19 +107,32 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p .agent-harness/artifacts
           baseline_path=".agent-harness/artifacts/perf-baseline.base.json"
           if [ "${{ github.event_name }}" = "pull_request" ] && [ -n "${{ github.base_ref }}" ]; then
             git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
             if git show "origin/${{ github.base_ref }}:.agent-harness/artifacts/perf-baseline.json" > "$baseline_path"; then
               echo "baseline_source=origin/${{ github.base_ref }}" >> "$GITHUB_OUTPUT"
-            else
+            elif [ -f .agent-harness/artifacts/perf-baseline.json ]; then
               cp .agent-harness/artifacts/perf-baseline.json "$baseline_path"
               echo "baseline_source=working-tree-fallback" >> "$GITHUB_OUTPUT"
+            else
+              echo "baseline_source=generated-fallback" >> "$GITHUB_OUTPUT"
             fi
-          else
+          elif [ -f .agent-harness/artifacts/perf-baseline.json ]; then
             cp .agent-harness/artifacts/perf-baseline.json "$baseline_path"
             echo "baseline_source=working-tree" >> "$GITHUB_OUTPUT"
+          else
+            echo "baseline_source=generated-fallback" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Ensure perf baseline exists
+        if: steps.perf_baseline.outputs.baseline_source == 'generated-fallback'
+        shell: bash
+        run: |
+          SUPATERM_PERF_SAMPLES=1 \
+          SUPATERM_PERF_OUTPUT_PATH=.agent-harness/artifacts/perf-baseline.base.json \
+          bun run perf:baseline
 
       - name: Collect perf current report
         shell: bash

@@ -193,7 +193,7 @@ async function measureSinglePane(browser: Browser, server: StartedServer): Promi
     await page.locator('.workspace-chip').waitFor({ state: 'visible' });
     const shellReadyMs = performance.now() - startedAt;
 
-    await page.locator('.pane-terminal canvas').first().waitFor({ state: 'visible' });
+    await page.locator('.pane-terminal canvas:not([data-supaterm-layer])').first().waitFor({ state: 'visible' });
     const firstTerminalCanvasMs = performance.now() - startedAt;
 
     await page.locator(".pane-status[data-tone='connected']").first().waitFor({ state: 'visible' });
@@ -250,7 +250,7 @@ async function measureFourPane(browser: Browser, server: StartedServer): Promise
 }
 
 async function runPerfScene(page: Page): Promise<void> {
-  await page.locator('.pane-terminal canvas').first().click();
+  await page.locator('.pane-terminal canvas:not([data-supaterm-layer])').first().click();
   await page.waitForTimeout(100);
   await page.keyboard.type([
     "printf 'PERF_ASCII_READY\\n'",

@@ -19,11 +19,26 @@ mise run check
 mise run release
 ```
 
+Local Linux parity through Docker:
+```bash
+bun run docker:linux:setup
+bun run docker:linux:check
+bun run docker:linux:test
+```
+
 Pinned toolchain:
 ```bash
 mise exec -- zig version
 mise exec -- bun --version
 ```
+
+Docker development environment:
+```bash
+docker compose build linux-dev
+bun run docker:linux:shell
+```
+
+The local Docker path exists to let macOS developers exercise the Linux toolchain and tests locally. CI still runs on native Linux runners with `mise`, not inside Docker.
 
 Server:
 ```bash
@@ -31,6 +46,13 @@ mise exec -- zig build
 mise exec -- zig build run
 mise exec -- zig build check
 mise exec -- zig build --release=small -Dembed-assets=true
+```
+
+Direct CLI:
+```bash
+./zig-out/bin/supaterm-server --help
+./zig-out/bin/supaterm-server --version
+./zig-out/bin/supaterm-server --listen 0.0.0.0:3000
 ```
 
 Local PTY shell startup:
@@ -45,6 +67,25 @@ curl http://127.0.0.1:3000/api/capabilities/shells
 ```
 
 The web workbench uses that endpoint to populate the per-pane shell selector and disable missing shells on the current host.
+
+`zmx` runtime examples:
+```bash
+./zig-out/bin/supaterm-server \
+  --backend zmx \
+  --zmx-socket-dir /tmp/zmx-501
+```
+
+That is the normal Supaterm-managed `zmx` mode. The browser workbench uses stable pane session IDs, and the backend creates or reuses the matching `zmx` sessions under that socket dir.
+
+Attach to a pre-existing raw `zmx` session:
+```bash
+ZMX_DIR=/tmp/zmx-501 zmx list --short
+./zig-out/bin/supaterm-server \
+  --backend zmx \
+  --zmx-socket-dir /tmp/zmx-501
+```
+
+If `zmx list --short` shows `work`, then opening `/?session=work` makes Supaterm probe `work` first before falling back to a hashed alias. If your local `zmx` naming uses a prefix, either use the prefixed name directly or start Supaterm with `--zmx-session-prefix <prefix>`.
 
 Web:
 ```bash
@@ -203,6 +244,7 @@ Current CI policy:
 - keep the `tip` prerelease channel aligned with `main` by force-moving the `tip` tag and refreshing the GitHub prerelease assets
 - run a nightly `00:00` GMT/UTC patch bump workflow that updates the shared package version, pushes a `vX.Y.Z-nightly` tag, and publishes macOS/Linux prerelease binaries
 - run a manual production workflow that tags the current shared package version as `vX.Y.Z` and publishes a GitHub release with macOS/Linux binaries
+- keep GitHub Actions on native Linux/macOS runners with `mise`; Docker is only for local Linux dev parity
 
 Shared version tooling:
 ```bash

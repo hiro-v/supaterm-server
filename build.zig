@@ -19,6 +19,14 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const web_assets_mod = b.createModule(.{
+        .root_source_file = if (embed_assets)
+            b.path("src/.embedded-web/web_assets.generated.zig")
+        else
+            b.path("src/web_assets.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
     const zmx_ipc_module = b.createModule(.{
         .root_source_file = b.path("third_party/zmx/src/ipc.zig"),
         .target = target,
@@ -33,6 +41,7 @@ pub fn build(b: *std.Build) void {
 
     exe_mod.addImport("zmx_bridge", zmx_bridge_module);
     exe_mod.addImport("zmx_ipc", zmx_ipc_module);
+    exe_mod.addImport("embedded_web_assets", web_assets_mod);
     exe_mod.addOptions("build_options", options);
 
     const exe = b.addExecutable(.{

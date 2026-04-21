@@ -35,6 +35,13 @@ mise run check
 mise run release
 ```
 
+Local Linux parity through Docker:
+```bash
+bun run docker:linux:setup
+bun run docker:linux:check
+bun run docker:linux:test
+```
+
 Equivalent repo scripts:
 ```bash
 bun run setup
@@ -52,9 +59,24 @@ mise exec -- bun install
 mise exec -- bun run hooks:install
 ```
 
+Local Linux dev container:
+```bash
+docker compose build linux-dev
+bun run docker:linux:setup
+```
+
+That container is only for local development parity. CI still runs on native Linux and macOS runners with `mise`, not Docker.
+
 Run the web server in dev mode:
 ```bash
 mise exec -- zig build run
+```
+
+Run the built CLI directly:
+```bash
+./zig-out/bin/supaterm-server --help
+./zig-out/bin/supaterm-server --version
+./zig-out/bin/supaterm-server --listen 0.0.0.0:3000
 ```
 
 Local PTY startup defaults to `--shell-startup fast`, which skips user shell init files for supported shells (`bash`, `zsh`, `fish`) to reduce first-byte latency in the browser. Use `mise exec -- zig build run -- --shell-startup full` when you want the user shell's full init path instead.
@@ -74,6 +96,55 @@ mise run release
 ```
 
 The embedded build now always refreshes `web/dist`, generates a dynamic asset manifest under `src/.embedded-web/web_assets.generated.zig`, stages the built Bun output under `src/.embedded-web/`, and bundles that staged output into `zig-out/bin/supaterm-server`. The checked-in [src/web_assets.zig](src/web_assets.zig) is now just a thin wrapper over that generated manifest, so release packaging follows whatever files Vite/Bun actually emitted instead of a hard-coded asset list.
+
+## CLI Examples
+
+Inspect the CLI surface:
+```bash
+mise exec -- zig build run -- --help
+mise exec -- zig build run -- --version
+```
+
+Run the built binary on all interfaces:
+```bash
+./zig-out/bin/supaterm-server --listen 0.0.0.0:3000
+```
+
+Run with a Supaterm-managed `zmx` backend:
+```bash
+./zig-out/bin/supaterm-server \
+  --backend zmx \
+  --zmx-socket-dir /tmp/zmx-501 \
+  --sqlite-path ./supaterm-server.sqlite3
+```
+
+In that mode, Supaterm owns the browser workbench snapshot and will create or reuse `zmx` sessions from stable pane session IDs. Open the browser with a stable shared session such as:
+```text
+http://127.0.0.1:3000/?session=demo
+```
+
+Attach to an already-existing raw local `zmx` session:
+```bash
+ZMX_DIR=/tmp/zmx-501 zmx list --short
+```
+
+If that prints a raw session name like `work`, start Supaterm against the same socket dir:
+```bash
+./zig-out/bin/supaterm-server \
+  --backend zmx \
+  --zmx-socket-dir /tmp/zmx-501
+```
+
+Then open:
+```text
+http://127.0.0.1:3000/?session=work
+```
+
+Supaterm now probes the raw `zmx` session name first. If `work` already exists in that socket dir, the pane attaches to that session instead of forcing a hashed `sess-...` alias.
+
+If your existing `zmx` sessions were created with a prefix, either:
+- use that full prefixed name as the browser `?session=...`, or
+- start Supaterm with `--zmx-session-prefix <prefix>` so the lookup matches your local `zmx` naming scheme.
 
 ## Verification
 
@@ -115,6 +186,7 @@ CI and release:
 The shared CI action also provisions `zlint` and exports `ZLINT_BIN` so Zig linting works on clean GitHub runners without relying on GHQ.
 The test workflow also runs a non-blocking Ubuntu perf job that resolves a PR-base baseline when available, collects `.agent-harness/artifacts/perf-current.json`, runs `perf:check` against that baseline, uploads base/current/check artifacts, and appends a short renderer/runtime plus budget summary to the job summary, including current-vs-baseline deltas, startup marks, atlas resets, and retained GPU buffer capacities.
 Nightly releases now run at `00:00` GMT/UTC every day and via `workflow_dispatch`, bump the shared patch version automatically, create a `vX.Y.Z-nightly` tag, and publish macOS/Linux prerelease artifacts. Production releases are manual via `workflow_dispatch`, tag the current shared semver as `vX.Y.Z`, build the same macOS/Linux artifacts, and publish a GitHub release.
+Local Docker support exists only for developer-side Linux parity. GitHub Actions keeps using native `mise` setup on Linux runners.
 
 ## Docs
 

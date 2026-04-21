@@ -26,8 +26,14 @@ describe('CI and hook configuration', () => {
     expect(workflow).toContain('name: perf report (ubuntu-latest)');
     expect(workflow).toContain('continue-on-error: true');
     expect(workflow).toContain('name: Resolve perf baseline source');
+    expect(workflow).toContain('mkdir -p .agent-harness/artifacts');
     expect(workflow).toContain('git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"');
     expect(workflow).toContain('git show "origin/${{ github.base_ref }}:.agent-harness/artifacts/perf-baseline.json"');
+    expect(workflow).toContain('elif [ -f .agent-harness/artifacts/perf-baseline.json ]; then');
+    expect(workflow).toContain('baseline_source=generated-fallback');
+    expect(workflow).toContain('name: Ensure perf baseline exists');
+    expect(workflow).toContain("if: steps.perf_baseline.outputs.baseline_source == 'generated-fallback'");
+    expect(workflow).toContain('SUPATERM_PERF_OUTPUT_PATH=.agent-harness/artifacts/perf-baseline.base.json');
     expect(workflow).toContain('SUPATERM_PERF_SAMPLES=1 bun run perf:current');
     expect(workflow).toContain('bun run perf:check');
     expect(workflow).toContain('SUPATERM_PERF_BASELINE_PATH=.agent-harness/artifacts/perf-baseline.base.json');
@@ -82,6 +88,25 @@ describe('CI and hook configuration', () => {
     expect(browserScript).toContain('ensureWebBuilt()');
     expect(browserScript).toContain("SUPATERM_BASE_URL: server.baseUrl");
     expect(libghosttyIgnore).not.toContain('ghostty-vt.wasm');
+  });
+
+  test('local Linux Docker tooling exists for dev parity without moving CI onto Docker', () => {
+    const packageJson = readRepoFile('package.json');
+    const compose = readRepoFile('compose.yml');
+    const dockerfile = readRepoFile('Dockerfile.dev');
+    const wrapper = readRepoFile('scripts/docker-linux-dev.sh');
+    const workflow = readRepoFile('.github/workflows/test.yml');
+
+    expect(packageJson).toContain('"docker:linux:check": "sh ./scripts/docker-linux-dev.sh check"');
+    expect(packageJson).toContain('"docker:linux:test": "sh ./scripts/docker-linux-dev.sh test"');
+    expect(compose).toContain('linux-dev:');
+    expect(compose).toContain('dockerfile: Dockerfile.dev');
+    expect(dockerfile).toContain('ubuntu:24.04');
+    expect(dockerfile).toContain('https://mise.run');
+    expect(wrapper).toContain('docker compose run --rm linux-dev');
+    expect(wrapper).toContain('mise trust mise.toml && mise install && mise run check');
+    expect(workflow).not.toContain('container:');
+    expect(workflow).toContain('runs-on: ${{ matrix.os }}');
   });
 
   test('tip release workflow force-moves the tip tag and updates the prerelease', () => {
