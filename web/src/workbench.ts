@@ -1,5 +1,5 @@
-import { type SessionConnectionDetails, type SessionQuery } from './session';
-import { getAppRuntime, type AppRuntime } from './runtime/runtime';
+import { getShellCapabilities, type SessionConnectionDetails, type SessionQuery, type ShellCapabilities } from './session';
+import { createAppRuntime, type AppRuntime } from './runtime/runtime';
 import {
   addTab,
   addWorkspace,
@@ -14,6 +14,7 @@ import {
   openClosePaneDialog,
   openCloseTabDialog,
   openCloseWorkspaceDialog,
+  openAppearanceDialog,
   openCreateSpaceDialog,
   openPaletteDialog,
   openPaneInfoDialog,
@@ -31,6 +32,8 @@ import {
   splitPane,
   toggleSidebar,
 } from './workbench/actions';
+import { createVisualConfigSourceForAppearance } from './workbench/appearance';
+import { resolveFontPresetFamily } from './runtime/config';
 import {
   resolveClickIntent,
   resolveDoubleClickIntent,
@@ -79,16 +82,14 @@ export type WorkbenchDependencies = {
 
 function createDefaultWorkbenchDependencies(
   sessionQuery: SessionQuery,
-): WorkbenchDependencies {
-  const appRuntime = getAppRuntime();
+): Omit<WorkbenchDependencies, 'appRuntime' | 'createPaneClient'> {
   return {
-    appRuntime,
     persistence: createServerWorkbenchPersistence(),
-    createPaneClient: createDefaultPaneClientFactory(appRuntime),
     resolveSessionConnection(workspace, tab, pane) {
       return {
         sessionId: buildPaneSessionId(workspace, tab, pane),
         token: sessionQuery.token,
+        shell: pane.shell,
       };
     },
   };
@@ -98,12 +99,15 @@ export class SupatermWorkbench {
   private readonly root: HTMLDivElement;
   private readonly sessionQuery: SessionQuery;
   private readonly deps: WorkbenchDependencies;
-  private readonly chromeSurface: ReturnType<AppRuntime['createChromeSurface']>;
+  private readonly hasCustomPaneClientFactory: boolean;
+  private appRuntime: AppRuntime;
+  private chromeSurface: ReturnType<AppRuntime['createChromeSurface']>;
   private readonly handlerSets = createWorkbenchHandlerSets(this);
   private state: WorkbenchState;
   private stateVersion = 0;
   private resizeState: ResizeState | null = null;
   private dialog: DialogState | null = null;
+  private shellCapabilities: ShellCapabilities | null = null;
 
   private readonly paneViews = new Map<string, PaneView>();
 
@@ -125,14 +129,18 @@ export class SupatermWorkbench {
     this.root = root;
     this.sessionQuery = sessionQuery;
     const defaults = createDefaultWorkbenchDependencies(sessionQuery);
+    const persistence = dependencies.persistence ?? defaults.persistence;
+    const initialState = persistence.load(sessionQuery.sessionId);
+    this.appRuntime = dependencies.appRuntime ?? this.createRuntimeForState(initialState);
     this.deps = {
-      appRuntime: dependencies.appRuntime ?? defaults.appRuntime,
-      persistence: dependencies.persistence ?? defaults.persistence,
-      createPaneClient: dependencies.createPaneClient ?? defaults.createPaneClient,
+      appRuntime: this.appRuntime,
+      persistence,
+      createPaneClient: dependencies.createPaneClient ?? createDefaultPaneClientFactory(this.appRuntime),
       resolveSessionConnection: dependencies.resolveSessionConnection ?? defaults.resolveSessionConnection,
     };
-    this.chromeSurface = this.deps.appRuntime.createChromeSurface();
-    this.state = this.deps.persistence.load(sessionQuery.sessionId);
+    this.hasCustomPaneClientFactory = dependencies.createPaneClient != null;
+    this.chromeSurface = this.appRuntime.createChromeSurface();
+    this.state = initialState;
   }
 
   mount(): void {
@@ -158,6 +166,7 @@ export class SupatermWorkbench {
     window.addEventListener('keydown', this.handleKeyDown);
     this.render();
     void this.hydrateRemoteState();
+    void this.hydrateShellCapabilities();
   }
 
   dispose(): void {
@@ -234,7 +243,7 @@ export class SupatermWorkbench {
   };
 
   private readonly handleInput = (event: Event) => {
-    const target = event.target as HTMLInputElement | null;
+    const target = event.target as HTMLInputElement | HTMLSelectElement | null;
     if (!target) return;
 
     const action = target.dataset.action;
@@ -251,9 +260,23 @@ export class SupatermWorkbench {
       action === 'dialog-value' &&
       this.dialog.type !== 'palette' &&
       this.dialog.type !== 'pane-info' &&
-      this.dialog.type !== 'confirm-close'
+      this.dialog.type !== 'confirm-close' &&
+      this.dialog.type !== 'appearance'
     ) {
       this.dialog.value = target.value;
+      return;
+    }
+
+    if (action === 'pane-shell' && this.dialog.type === 'pane-info') {
+      this.dialog.shell = target.value as typeof this.dialog.shell;
+      return;
+    }
+
+    if (action === 'appearance-field' && this.dialog.type === 'appearance') {
+      this.updateAppearanceDialogField(target);
+      if (target instanceof HTMLSelectElement || target.type === 'color') {
+        this.renderOverlay();
+      }
     }
   };
 
@@ -340,11 +363,26 @@ export class SupatermWorkbench {
   }
 
   private applyVisualProfile(): void {
-    const { chromePalette } = this.deps.appRuntime.visualProfile;
+    const { chromePalette, theme } = this.appRuntime.visualProfile;
     this.root.style.setProperty('--chrome-shell-bg', chromePalette.shellBackground);
     this.root.style.setProperty('--chrome-shell-bg-alt', chromePalette.shellBackgroundAlt);
     this.root.style.setProperty('--chrome-shell-glow', chromePalette.glow);
     this.root.style.setProperty('--chrome-shell-grid', chromePalette.grid);
+    this.root.style.setProperty('--bg', theme.background);
+    this.root.style.setProperty('--bg-2', chromePalette.shellBackgroundAlt);
+    this.root.style.setProperty('--sidebar', chromePalette.shellBackgroundAlt);
+    this.root.style.setProperty('--panel', chromePalette.shellBackground);
+    this.root.style.setProperty('--panel-2', chromePalette.shellBackgroundAlt);
+    this.root.style.setProperty('--panel-3', chromePalette.grid);
+    this.root.style.setProperty('--panel-4', chromePalette.grid);
+    this.root.style.setProperty('--text', theme.foreground);
+    this.root.style.setProperty('--accent', theme.foreground);
+    this.root.style.setProperty('--accent-2', theme.cursor);
+    this.root.style.setProperty('--accent-soft', `${theme.selectionBackground}33`);
+    this.root.style.setProperty('--border', `${theme.foreground}1a`);
+    this.root.style.setProperty('--border-strong', `${theme.foreground}2e`);
+    this.root.style.setProperty('--muted', `${theme.foreground}99`);
+    this.root.style.setProperty('--muted-2', `${theme.foreground}66`);
   }
 
   renderOverlay(): void {
@@ -357,6 +395,7 @@ export class SupatermWorkbench {
       activePane: this.getActivePane(),
       paneViews: this.paneViews,
       findPaneById: (paneId) => findPaneById(this.state, paneId),
+      shellCapabilities: this.shellCapabilities,
     });
   }
 
@@ -390,6 +429,11 @@ export class SupatermWorkbench {
     this.renderOverlay();
   }
 
+  openAppearanceDialog(): void {
+    this.dialog = openAppearanceDialog(this.state);
+    this.renderOverlay();
+  }
+
   openCloseWorkspaceDialog(workspaceId: string = this.getActiveWorkspace().id): void {
     this.dialog = openCloseWorkspaceDialog(this.state, workspaceId);
     this.renderOverlay();
@@ -411,6 +455,7 @@ export class SupatermWorkbench {
   }
 
   submitDialog(): void {
+    const previousAppearance = JSON.stringify(this.state.appearance);
     const result = submitWorkbenchDialog(this.state, this.dialog, this.sessionQuery.sessionId);
     switch (result.kind) {
       case 'run-command':
@@ -422,6 +467,9 @@ export class SupatermWorkbench {
       case 'commit':
         for (const paneId of result.disposedPaneIds) {
           this.disposePane(paneId);
+        }
+        if (previousAppearance !== JSON.stringify(this.state.appearance)) {
+          this.refreshAppearanceRuntime();
         }
         this.dialog = null;
         this.commitState();
@@ -521,6 +569,70 @@ export class SupatermWorkbench {
     this.render();
   }
 
+  private updateAppearanceDialogField(target: HTMLInputElement | HTMLSelectElement): void {
+    if (this.dialog?.type !== 'appearance') return;
+    const dialog = this.dialog;
+    const field = target.dataset.appearanceField;
+    if (!field) return;
+
+    switch (field) {
+      case 'fontPreset':
+        dialog.appearance.fontPreset = target.value as typeof dialog.appearance.fontPreset;
+        if (dialog.appearance.fontPreset !== 'custom') {
+          dialog.appearance.fontFamily = resolveFontPresetFamily(dialog.appearance.fontPreset);
+        }
+        dialog.appearance.presetId = 'custom';
+        break;
+      case 'fontFamily':
+        dialog.appearance.fontFamily = target.value;
+        dialog.appearance.fontPreset = 'custom';
+        dialog.appearance.presetId = 'custom';
+        break;
+      case 'fontSize':
+        dialog.appearance.fontSize = Number(target.value);
+        dialog.appearance.presetId = 'custom';
+        break;
+      case 'cursorBlink':
+        dialog.appearance.cursorBlink = target.value === 'true';
+        dialog.appearance.presetId = 'custom';
+        break;
+      default:
+        if (field.startsWith('theme.')) {
+          const themeKey = field.slice('theme.'.length) as keyof typeof dialog.appearance.theme;
+          dialog.appearance.theme[themeKey] = target.value;
+          dialog.appearance.presetId = 'custom';
+        }
+        break;
+    }
+
+    if (field !== 'fontPreset' || dialog.appearance.fontPreset === 'custom') {
+      dialog.appearance.presetId = 'custom';
+    }
+  }
+
+  private refreshAppearanceRuntime(): void {
+    this.chromeSurface.dispose();
+    for (const view of this.paneViews.values()) {
+      view.client.dispose();
+      view.root.remove();
+    }
+    this.paneViews.clear();
+    this.appRuntime = this.createRuntimeForState(this.state);
+    if (!this.hasCustomPaneClientFactory) {
+      this.deps.createPaneClient = createDefaultPaneClientFactory(this.appRuntime);
+    }
+    this.deps.appRuntime = this.appRuntime;
+    this.chromeSurface = this.appRuntime.createChromeSurface();
+    this.applyVisualProfile();
+    this.chromeSurface.mount(this.shell);
+  }
+
+  private createRuntimeForState(state: WorkbenchState): AppRuntime {
+    return createAppRuntime({
+      visualConfigSource: createVisualConfigSourceForAppearance(state.appearance),
+    });
+  }
+
   private disposePane(paneId: string): void {
     const view = this.paneViews.get(paneId);
     if (!view) return;
@@ -572,7 +684,16 @@ export class SupatermWorkbench {
     if (hydrationVersion !== this.stateVersion) {
       return;
     }
+    const previousAppearance = JSON.stringify(this.state.appearance);
     this.state = remoteState;
+    if (previousAppearance !== JSON.stringify(this.state.appearance)) {
+      this.refreshAppearanceRuntime();
+    }
     this.render();
+  }
+
+  private async hydrateShellCapabilities(): Promise<void> {
+    this.shellCapabilities = await getShellCapabilities(window.location).catch(() => null);
+    this.renderOverlay();
   }
 }

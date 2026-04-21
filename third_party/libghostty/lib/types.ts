@@ -413,6 +413,7 @@ export interface GhosttyWasmExports extends WebAssembly.Exports {
   ghostty_terminal_free(terminal: TerminalHandle): void;
   ghostty_terminal_resize(terminal: TerminalHandle, cols: number, rows: number): void;
   ghostty_terminal_write(terminal: TerminalHandle, dataPtr: number, dataLen: number): void;
+  ghostty_terminal_set_pixel_size(terminal: TerminalHandle, widthPx: number, heightPx: number): void;
 
   // RenderState API - high-performance rendering (ONE call gets ALL data)
   ghostty_render_state_update(terminal: TerminalHandle): number; // 0=none, 1=partial, 2=full
@@ -442,6 +443,28 @@ export interface GhosttyWasmExports extends WebAssembly.Exports {
   ghostty_terminal_is_alternate_screen(terminal: TerminalHandle): boolean;
   ghostty_terminal_has_mouse_tracking(terminal: TerminalHandle): number;
   ghostty_terminal_get_mode(terminal: TerminalHandle, mode: number, isAnsi: boolean): number;
+
+  // Kitty graphics API
+  ghostty_terminal_has_kitty_graphics(terminal: TerminalHandle): boolean;
+  ghostty_terminal_is_kitty_graphics_dirty(terminal: TerminalHandle): boolean;
+  ghostty_terminal_mark_kitty_graphics_clean(terminal: TerminalHandle): void;
+  ghostty_terminal_get_kitty_image_placement_count(terminal: TerminalHandle): number;
+  ghostty_terminal_get_kitty_image_placements(
+    terminal: TerminalHandle,
+    bufPtr: number,
+    bufLen: number,
+  ): number;
+  ghostty_terminal_get_kitty_image_metadata(
+    terminal: TerminalHandle,
+    imageId: number,
+    metadataPtr: number,
+  ): boolean;
+  ghostty_terminal_get_kitty_image_data(
+    terminal: TerminalHandle,
+    imageId: number,
+    bufPtr: number,
+    bufLen: number,
+  ): number;
 
   // Scrollback API
   ghostty_terminal_get_scrollback_length(terminal: TerminalHandle): number;
@@ -566,6 +589,43 @@ export interface GhosttyCell {
   width: number; // u8 (character width: 1=normal, 2=wide, etc.)
   hyperlink_id: number; // u16 (0 = no link, >0 = hyperlink ID in set)
   grapheme_len: number; // u8 (number of extra codepoints beyond first)
+}
+
+export enum GhosttyKittyImageFormat {
+  RGB = 0,
+  RGBA = 1,
+  GRAY_ALPHA = 2,
+  GRAY = 3,
+  PNG = 4,
+}
+
+export enum GhosttyKittyImagePlacementKind {
+  PINNED = 0,
+  VIRTUAL = 1,
+}
+
+export interface GhosttyKittyImagePlacement {
+  imageId: number;
+  kind: GhosttyKittyImagePlacementKind;
+  x: number;
+  y: number;
+  z: number;
+  width: number;
+  height: number;
+  cellOffsetX: number;
+  cellOffsetY: number;
+  sourceX: number;
+  sourceY: number;
+  sourceWidth: number;
+  sourceHeight: number;
+}
+
+export interface GhosttyKittyImageMetadata {
+  imageId: number;
+  width: number;
+  height: number;
+  byteLength: number;
+  format: GhosttyKittyImageFormat;
 }
 
 /**

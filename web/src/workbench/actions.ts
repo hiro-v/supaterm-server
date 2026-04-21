@@ -1,4 +1,10 @@
 import type { DialogState } from './overlay';
+import type { PaneShell } from '../session';
+import {
+  cloneWorkbenchAppearance,
+  normalizeWorkbenchAppearance,
+  type WorkbenchAppearance,
+} from './appearance';
 import {
   countLeaves,
   createPane,
@@ -80,9 +86,18 @@ export function openRenamePaneDialog(state: WorkbenchState, paneId = getActiveTa
 }
 
 export function openPaneInfoDialog(state: WorkbenchState, paneId = getActiveTab(state).activePaneId): DialogState {
+  const pane = findPaneById(state, paneId);
   return {
     type: 'pane-info',
     paneId,
+    shell: pane?.shell ?? 'system',
+  };
+}
+
+export function openAppearanceDialog(state: WorkbenchState): DialogState {
+  return {
+    type: 'appearance',
+    appearance: cloneWorkbenchAppearance(state.appearance),
   };
 }
 
@@ -144,6 +159,18 @@ export function renamePane(state: WorkbenchState, paneId: string, title: string)
   const pane = findPaneById(state, paneId);
   if (!pane) return false;
   pane.title = title;
+  return true;
+}
+
+export function setPaneShell(state: WorkbenchState, paneId: string, shell: PaneShell): boolean {
+  const pane = findPaneById(state, paneId);
+  if (!pane) return false;
+  pane.shell = shell;
+  return true;
+}
+
+export function setWorkbenchAppearance(state: WorkbenchState, appearance: WorkbenchAppearance): boolean {
+  state.appearance = normalizeWorkbenchAppearance(appearance);
   return true;
 }
 

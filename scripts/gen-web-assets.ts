@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 type Asset = {
@@ -7,9 +7,10 @@ type Asset = {
   contentType: string;
 };
 
-const root = process.cwd();
+const root = path.resolve(import.meta.dir, "..");
 const distDir = path.join(root, "web", "dist");
-const outputFile = path.join(root, "src", "web_assets.zig");
+const embedDir = path.join(root, "src", ".embedded-web");
+const generatedFile = path.join(embedDir, "web_assets.generated.zig");
 
 const files: Asset[] = [];
 
@@ -22,6 +23,10 @@ function collectFiles(dir: string, prefix = ""): void {
     const rel = prefix ? path.posix.join(prefix, entry) : entry;
     if (stat.isDirectory()) {
       collectFiles(item, rel);
+      continue;
+    }
+
+    if (entry.endsWith(".map")) {
       continue;
     }
 
@@ -47,6 +52,9 @@ function detectContentType(filename: string): string {
 collectFiles(distDir, "");
 files.sort((a, b) => a.relPath.localeCompare(b.relPath));
 
+rmSync(embedDir, { recursive: true, force: true });
+mkdirSync(embedDir, { recursive: true });
+
 const lines = [
   "const std = @import(\"std\");",
   "",
@@ -62,15 +70,15 @@ const lines = [
 ];
 
 for (const file of files) {
-  const embedPath = path
-    .relative(root, file.fullPath)
-    .replace(/\\/g, "/");
+  const stagedPath = path.join(embedDir, file.relPath);
+  mkdirSync(path.dirname(stagedPath), { recursive: true });
+  copyFileSync(file.fullPath, stagedPath);
+
   lines.push(
-    `    .{ .path = "${file.relPath}", .data = @embedFile("${embedPath}"), .content_type = "${file.contentType}" },`,
+    `    .{ .path = "${file.relPath}", .data = @embedFile("${file.relPath}"), .content_type = "${file.contentType}" },`,
   );
 }
 
 lines.push("};", "", "pub fn find(path: []const u8) ?WebAsset {", "    for (assets) |asset| {", "        if (std.mem.eql(u8, asset.path, path)) return asset;", "    }", "    return null;", "}");
 
-mkdirSync(path.dirname(outputFile), { recursive: true });
-writeFileSync(outputFile, lines.join("\n"), "utf8");
+writeFileSync(generatedFile, lines.join("\n"), "utf8");

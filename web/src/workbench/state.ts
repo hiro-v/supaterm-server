@@ -1,7 +1,11 @@
+import type { PaneShell } from '../session';
+import { createDefaultWorkbenchAppearance, normalizeWorkbenchAppearance, type WorkbenchAppearance } from './appearance';
+
 export type PaneLeaf = {
   kind: 'pane';
   id: string;
   title: string;
+  shell: PaneShell;
 };
 
 export type SplitNode = {
@@ -33,6 +37,7 @@ export type WorkbenchState = {
   workspaces: WorkspaceState[];
   activeWorkspaceId: string;
   sidebarCollapsed: boolean;
+  appearance: WorkbenchAppearance;
 };
 
 export function createWorkspace(name: string, seedSessionId: string | null): WorkspaceState {
@@ -60,11 +65,13 @@ export function createPane(title: string): PaneLeaf {
     kind: 'pane',
     id: makeId('pane'),
     title,
+    shell: 'system',
   };
 }
 
 export function buildPaneSessionId(workspace: WorkspaceState, tab: TabState, pane: PaneLeaf): string {
-  return `${workspace.id}.${tab.id}.${pane.id}`;
+  const suffix = pane.shell === 'system' ? '' : `.shell.${pane.shell}`;
+  return `${workspace.id}.${tab.id}.${pane.id}${suffix}`;
 }
 
 export function findPaneNode(node: PaneNode, paneId: string): PaneLeaf | null {
@@ -128,6 +135,7 @@ function createInitialState(seedSessionId: string | null): WorkbenchState {
     workspaces: [workspace],
     activeWorkspaceId: workspace.id,
     sidebarCollapsed: false,
+    appearance: createDefaultWorkbenchAppearance(),
   };
 }
 
@@ -144,8 +152,37 @@ export function normalizeWorkbenchState(
   }
 
   return {
-    workspaces: parsed.workspaces,
+    workspaces: parsed.workspaces.map(normalizeWorkspaceState),
     activeWorkspaceId: parsed.activeWorkspaceId,
     sidebarCollapsed: parsed.sidebarCollapsed ?? false,
+    appearance: normalizeWorkbenchAppearance(parsed.appearance),
+  };
+}
+
+function normalizeWorkspaceState(workspace: WorkspaceState): WorkspaceState {
+  return {
+    ...workspace,
+    tabs: workspace.tabs.map(normalizeTabState),
+  };
+}
+
+function normalizeTabState(tab: TabState): TabState {
+  return {
+    ...tab,
+    root: normalizePaneNode(tab.root),
+  };
+}
+
+function normalizePaneNode(node: PaneNode): PaneNode {
+  if (node.kind === 'pane') {
+    return {
+      ...node,
+      shell: node.shell ?? 'system',
+    };
+  }
+  return {
+    ...node,
+    first: normalizePaneNode(node.first),
+    second: normalizePaneNode(node.second),
   };
 }

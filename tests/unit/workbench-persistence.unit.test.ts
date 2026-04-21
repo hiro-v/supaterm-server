@@ -38,6 +38,7 @@ describe('workbench persistence', () => {
 
     const state = createInitialWorkbenchState(null);
     state.sidebarCollapsed = true;
+    state.appearance.fontSize = 17;
 
     persistence.persist(state);
     persistence.persist(state);
@@ -46,9 +47,11 @@ describe('workbench persistence', () => {
     const saved = storage.get('test.workbench:default');
     expect(saved).toBeDefined();
     expect(JSON.parse(saved!).sidebarCollapsed).toBe(true);
+    expect(JSON.parse(saved!).appearance.fontSize).toBe(17);
 
     const loaded = persistence.load(null);
     expect(loaded.sidebarCollapsed).toBe(true);
+    expect(loaded.appearance.fontSize).toBe(17);
   });
 
   test('hydrates from the remote snapshot client and caches the result locally', async () => {

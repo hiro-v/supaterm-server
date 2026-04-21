@@ -25,11 +25,12 @@ describe('session helpers', () => {
       new URL('https://supaterm.dev/app') as unknown as Location,
       'shared/session:v1',
       'abc123',
+      'fish',
       120,
       40,
     );
     expect(url).toBe(
-      'wss://supaterm.dev/api/sessions/shared%2Fsession%3Av1/ws?cols=120&rows=40&token=abc123',
+      'wss://supaterm.dev/api/sessions/shared%2Fsession%3Av1/ws?cols=120&rows=40&token=abc123&shell=fish',
     );
   });
 

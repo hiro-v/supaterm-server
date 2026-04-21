@@ -25,6 +25,7 @@ export type PaneView = {
   metrics: HTMLSpanElement;
   status: HTMLSpanElement;
   client: PaneClient;
+  session: SessionConnectionDetails;
 };
 
 type RenderPaneTreeOptions = {
@@ -118,8 +119,14 @@ function ensurePaneView(
   resolveSessionConnection: PaneSessionResolver,
 ): PaneView {
   const existing = paneViews.get(pane.id);
-  if (existing) {
+  const session = resolveSessionConnection(workspace, tab, pane);
+  if (existing && existing.session.sessionId === session.sessionId && existing.session.shell === session.shell) {
     return existing;
+  }
+  if (existing) {
+    existing.client.dispose();
+    existing.root.remove();
+    paneViews.delete(pane.id);
   }
 
   const root = document.createElement('div');
@@ -152,10 +159,10 @@ function ensurePaneView(
       mount,
       statsLabel: metrics,
       status,
-      session: resolveSessionConnection(workspace, tab, pane),
+      session,
     });
 
-  const view: PaneView = { root, title, metrics, status, client };
+  const view: PaneView = { root, title, metrics, status, client, session };
   paneViews.set(pane.id, view);
   return view;
 }

@@ -22,8 +22,12 @@ export async function openConnectedWorkbench(page: Page, sessionId = createBrows
   return sessionId;
 }
 
+export function terminalCanvasLocator(page: Page) {
+  return page.locator('.pane-terminal canvas:not([data-supaterm-layer])').first();
+}
+
 export async function runTerminalCommand(page: Page, command: string, delay = 10) {
-  await page.click('.pane-terminal canvas');
+  await terminalCanvasLocator(page).click();
   await page.waitForTimeout(100);
   await page.keyboard.type(command, { delay });
   await page.keyboard.press('Enter');

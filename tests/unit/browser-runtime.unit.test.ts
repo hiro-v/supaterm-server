@@ -45,11 +45,11 @@ describe('browser runtime profile', () => {
       }),
     );
 
-    expect(visualProfile.id).toBe('supaterm.neutral-green');
-    expect(visualProfile.themeId).toBe('supaterm.theme.neutral-green');
+    expect(visualProfile.id).toBe('supaterm.blackout');
+    expect(visualProfile.themeId).toBe('supaterm.theme.blackout');
     expect(visualProfile.runtime.rendererReadiness).toBe('canvas-only');
-    expect(visualProfile.theme.background).toBe('#101319');
-    expect(visualProfile.fontFamily).toContain('JetBrains Mono');
+    expect(visualProfile.theme.background).toBe('#000000');
+    expect(visualProfile.fontFamily).toContain('MesloLGS NF');
   });
 
   test('creates a real pane runtime with an active renderer adapter', () => {
@@ -77,14 +77,14 @@ describe('browser runtime profile', () => {
     try {
       const runtime = createPaneRuntime();
       expect(runtime.runtimeProfile.rendererReadiness).toBe('webgpu-ready');
-      expect(runtime.visualProfile.id).toBe('supaterm.neutral-green');
+      expect(runtime.visualProfile.id).toBe('supaterm.blackout');
       expect(runtime.renderer.descriptor.id).toBe('supaterm.renderer.libghosty-canvas');
       expect(runtime.renderer.descriptor.activeRenderer).toBe('libghosty-canvas');
       expect(runtime.renderer.descriptor.transport).toBe('canvas');
       expect(runtime.renderer.descriptor.requestedRenderer).toBe('webgpu');
       expect(runtime.renderer.descriptor.fallbackReason).toContain('WebGPU terminal renderer remains experimental');
-      expect(runtime.renderer.descriptor.visualProfileId).toBe('supaterm.neutral-green');
-      expect(runtime.renderer.descriptor.themeId).toBe('supaterm.theme.neutral-green');
+      expect(runtime.renderer.descriptor.visualProfileId).toBe('supaterm.blackout');
+      expect(runtime.renderer.descriptor.themeId).toBe('supaterm.theme.blackout');
     } finally {
       Object.defineProperty(globalThis, 'document', { configurable: true, value: originalDocument });
       Object.defineProperty(globalThis, 'navigator', { configurable: true, value: originalNavigator });

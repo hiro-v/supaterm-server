@@ -12,6 +12,9 @@ import {
   DirtyState,
   GHOSTTY_CONFIG_SIZE,
   type GhosttyCell,
+  GhosttyKittyImageFormat,
+  type GhosttyKittyImageMetadata,
+  type GhosttyKittyImagePlacement,
   type GhosttyTerminalConfig,
   type GhosttyWasmExports,
   KeyEncoderOption,
@@ -29,6 +32,9 @@ export {
   type Cursor,
   DirtyState,
   type GhosttyCell,
+  GhosttyKittyImageFormat,
+  type GhosttyKittyImageMetadata,
+  type GhosttyKittyImagePlacement,
   type GhosttyTerminalConfig,
   KeyEncoderOption,
   type RGB,
@@ -264,6 +270,11 @@ export class GhosttyTerminal {
   /** Reusable buffer for viewport operations */
   private viewportBufferPtr: number = 0;
   private viewportBufferSize: number = 0;
+  private kittyPlacementBufferPtr: number = 0;
+  private kittyPlacementBufferSize: number = 0;
+  private kittyMetadataBufferPtr: number = 0;
+  private kittyDataBufferPtr: number = 0;
+  private kittyDataBufferSize: number = 0;
 
   /** Cell pool for zero-allocation rendering */
   private cellPool: GhosttyCell[] = [];
@@ -356,10 +367,28 @@ export class GhosttyTerminal {
     this.initCellPool();
   }
 
+  setPixelSize(widthPx: number, heightPx: number): void {
+    this.exports.ghostty_terminal_set_pixel_size(this.handle, widthPx, heightPx);
+  }
+
   free(): void {
     if (this.viewportBufferPtr) {
       this.exports.ghostty_wasm_free_u8_array(this.viewportBufferPtr, this.viewportBufferSize);
       this.viewportBufferPtr = 0;
+    }
+    if (this.kittyPlacementBufferPtr) {
+      this.exports.ghostty_wasm_free_u8_array(this.kittyPlacementBufferPtr, this.kittyPlacementBufferSize);
+      this.kittyPlacementBufferPtr = 0;
+      this.kittyPlacementBufferSize = 0;
+    }
+    if (this.kittyMetadataBufferPtr) {
+      this.exports.ghostty_wasm_free_u8_array(this.kittyMetadataBufferPtr, 20);
+      this.kittyMetadataBufferPtr = 0;
+    }
+    if (this.kittyDataBufferPtr) {
+      this.exports.ghostty_wasm_free_u8_array(this.kittyDataBufferPtr, this.kittyDataBufferSize);
+      this.kittyDataBufferPtr = 0;
+      this.kittyDataBufferSize = 0;
     }
     this.exports.ghostty_terminal_free(this.handle);
   }
@@ -528,6 +557,110 @@ export class GhosttyTerminal {
 
   hasMouseTracking(): boolean {
     return this.exports.ghostty_terminal_has_mouse_tracking(this.handle) !== 0;
+  }
+
+  hasKittyGraphics(): boolean {
+    return this.exports.ghostty_terminal_has_kitty_graphics?.(this.handle) ?? false;
+  }
+
+  isKittyGraphicsDirty(): boolean {
+    return this.exports.ghostty_terminal_is_kitty_graphics_dirty?.(this.handle) ?? false;
+  }
+
+  markKittyGraphicsClean(): void {
+    this.exports.ghostty_terminal_mark_kitty_graphics_clean?.(this.handle);
+  }
+
+  getKittyImagePlacements(): GhosttyKittyImagePlacement[] {
+    const count = this.exports.ghostty_terminal_get_kitty_image_placement_count?.(this.handle) ?? 0;
+    if (count <= 0) return [];
+
+    const structSize = 52;
+    const neededSize = count * structSize;
+    if (!this.kittyPlacementBufferPtr || this.kittyPlacementBufferSize < neededSize) {
+      if (this.kittyPlacementBufferPtr) {
+        this.exports.ghostty_wasm_free_u8_array(this.kittyPlacementBufferPtr, this.kittyPlacementBufferSize);
+      }
+      this.kittyPlacementBufferPtr = this.exports.ghostty_wasm_alloc_u8_array(neededSize);
+      this.kittyPlacementBufferSize = neededSize;
+    }
+
+    const written = this.exports.ghostty_terminal_get_kitty_image_placements(
+      this.handle,
+      this.kittyPlacementBufferPtr,
+      count,
+    );
+    if (written <= 0) return [];
+
+    const view = new DataView(this.memory.buffer, this.kittyPlacementBufferPtr, written * structSize);
+    const placements: GhosttyKittyImagePlacement[] = [];
+    for (let index = 0; index < written; index += 1) {
+      const offset = index * structSize;
+      placements.push({
+        imageId: view.getUint32(offset, true),
+        kind: view.getUint32(offset + 4, true),
+        x: view.getInt32(offset + 8, true),
+        y: view.getInt32(offset + 12, true),
+        z: view.getInt32(offset + 16, true),
+        width: view.getUint32(offset + 20, true),
+        height: view.getUint32(offset + 24, true),
+        cellOffsetX: view.getUint32(offset + 28, true),
+        cellOffsetY: view.getUint32(offset + 32, true),
+        sourceX: view.getUint32(offset + 36, true),
+        sourceY: view.getUint32(offset + 40, true),
+        sourceWidth: view.getUint32(offset + 44, true),
+        sourceHeight: view.getUint32(offset + 48, true),
+      });
+    }
+
+    return placements;
+  }
+
+  getKittyImageMetadata(imageId: number): GhosttyKittyImageMetadata | null {
+    if (!this.exports.ghostty_terminal_get_kitty_image_metadata) return null;
+    if (!this.kittyMetadataBufferPtr) {
+      this.kittyMetadataBufferPtr = this.exports.ghostty_wasm_alloc_u8_array(20);
+    }
+
+    const ok = this.exports.ghostty_terminal_get_kitty_image_metadata(
+      this.handle,
+      imageId,
+      this.kittyMetadataBufferPtr,
+    );
+    if (!ok) return null;
+
+    const view = new DataView(this.memory.buffer, this.kittyMetadataBufferPtr, 20);
+    return {
+      imageId: view.getUint32(0, true),
+      width: view.getUint32(4, true),
+      height: view.getUint32(8, true),
+      byteLength: view.getUint32(12, true),
+      format: view.getUint8(16) as GhosttyKittyImageFormat,
+    };
+  }
+
+  getKittyImageData(imageId: number, byteLength?: number): Uint8Array | null {
+    if (!this.exports.ghostty_terminal_get_kitty_image_data) return null;
+    const metadata = byteLength == null ? this.getKittyImageMetadata(imageId) : null;
+    const requiredSize = byteLength ?? metadata?.byteLength ?? 0;
+    if (requiredSize <= 0) return null;
+
+    if (!this.kittyDataBufferPtr || this.kittyDataBufferSize < requiredSize) {
+      if (this.kittyDataBufferPtr) {
+        this.exports.ghostty_wasm_free_u8_array(this.kittyDataBufferPtr, this.kittyDataBufferSize);
+      }
+      this.kittyDataBufferPtr = this.exports.ghostty_wasm_alloc_u8_array(requiredSize);
+      this.kittyDataBufferSize = requiredSize;
+    }
+
+    const written = this.exports.ghostty_terminal_get_kitty_image_data(
+      this.handle,
+      imageId,
+      this.kittyDataBufferPtr,
+      requiredSize,
+    );
+    if (written <= 0) return null;
+    return new Uint8Array(this.memory.buffer, this.kittyDataBufferPtr, written).slice();
   }
 
   // ==========================================================================
@@ -877,6 +1010,11 @@ export class GhosttyTerminal {
     if (this.graphemeBufferPtr) {
       this.exports.ghostty_wasm_free_u8_array(this.graphemeBufferPtr, 16 * 4);
       this.graphemeBufferPtr = 0;
+    }
+    if (this.kittyPlacementBufferPtr) {
+      this.exports.ghostty_wasm_free_u8_array(this.kittyPlacementBufferPtr, this.kittyPlacementBufferSize);
+      this.kittyPlacementBufferPtr = 0;
+      this.kittyPlacementBufferSize = 0;
     }
     this.graphemeBuffer = null;
   }

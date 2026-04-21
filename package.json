@@ -8,6 +8,13 @@
     "web/*"
   ],
   "scripts": {
+    "setup": "mise trust mise.toml && mise install && mise run setup",
+    "dev": "mise run dev",
+    "release": "mise run release",
+    "check": "mise run check",
+    "version:current": "bun run ./scripts/release-version.ts current",
+    "version:bump:patch": "bun run ./scripts/release-version.ts bump patch",
+    "version:set": "bun run ./scripts/release-version.ts set",
     "build": "bunx turbo run build",
     "typecheck": "bunx turbo run typecheck",
     "lint": "bunx turbo run lint && bun run zig:lint",

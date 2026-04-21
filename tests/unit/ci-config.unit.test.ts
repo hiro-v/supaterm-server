@@ -93,6 +93,38 @@ describe('CI and hook configuration', () => {
     expect(workflow).toContain('gh release edit tip');
     expect(workflow).toContain('--prerelease');
   });
+
+  test('nightly release workflow bumps patch semver on a midnight GMT schedule and ships macOS/Linux binaries', () => {
+    const workflow = readRepoFile('.github/workflows/release-nightly.yml');
+
+    expect(workflow).toContain('cron: "0 0 * * *"');
+    expect(workflow).toContain('workflow_dispatch: {}');
+    expect(workflow).toContain('bun run --silent version:bump:patch');
+    expect(workflow).toContain('git commit -m "chore(release): bump nightly version to ${VERSION}"');
+    expect(workflow).toContain('TAG="v${VERSION}-nightly"');
+    expect(workflow).toContain('ubuntu-latest');
+    expect(workflow).toContain('macos-latest');
+    expect(workflow).toContain('zig build --release=small -Dembed-assets=true');
+    expect(workflow).toContain('sh ./scripts/package-release.sh "${{ needs.prepare.outputs.version }}"');
+    expect(workflow).toContain('gh release create "${{ needs.prepare.outputs.tag }}"');
+    expect(workflow).toContain('--prerelease');
+  });
+
+  test('production release workflow tags the current semver version and publishes a GitHub release', () => {
+    const workflow = readRepoFile('.github/workflows/release-prod.yml');
+
+    expect(workflow).toContain('workflow_dispatch: {}');
+    expect(workflow).toContain('bun run --silent version:current');
+    expect(workflow).toContain('TAG="v${VERSION}"');
+    expect(workflow).toContain('git tag -a "${TAG}"');
+    expect(workflow).toContain('git push origin "${TAG}"');
+    expect(workflow).toContain('ubuntu-latest');
+    expect(workflow).toContain('macos-latest');
+    expect(workflow).toContain('zig build --release=small -Dembed-assets=true');
+    expect(workflow).toContain('sh ./scripts/package-release.sh "${{ needs.prepare.outputs.version }}"');
+    expect(workflow).toContain('gh release create "${{ needs.prepare.outputs.tag }}"');
+    expect(workflow).not.toContain('--prerelease');
+  });
 });
 
 function readRepoFile(relativePath: string): string {

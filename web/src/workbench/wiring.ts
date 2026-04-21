@@ -7,6 +7,7 @@ import {
 export type WorkbenchHandlerHost = {
   addTab(): void;
   toggleSidebar(): void;
+  openAppearanceDialog(): void;
   openRenameTabDialog(): void;
   openRenamePaneDialog(): void;
   openCloseTabDialog(): void;
@@ -32,6 +33,7 @@ export function createWorkbenchHandlerSets(host: WorkbenchHandlerHost) {
   const callbacks = {
     addTab: () => host.addTab(),
     toggleSidebar: () => host.toggleSidebar(),
+    openAppearanceDialog: () => host.openAppearanceDialog(),
     openRenameTabDialog: () => host.openRenameTabDialog(),
     openRenamePaneDialog: () => host.openRenamePaneDialog(),
     openCloseTabDialog: () => host.openCloseTabDialog(),

@@ -21,12 +21,16 @@ Use this when changing the browser workbench, terminal rendering integration, or
 - Treat upstream `ghostty-web` as the VT-core reference and `restty` as the browser renderer/runtime reference.
 - When adding rendering complexity, preserve a path toward `WebGPU` primary and `WebGL2` fallback instead of baking assumptions into the workbench layer.
 - Prefer injected pane-client and persistence seams over direct construction in rendering modules.
+- Keep theme/font preferences inside persisted workbench state so the same values round-trip through local storage and the SQLite workbench snapshot.
+- Keep runtime visual config rebuildable from workbench state instead of coupling it to a singleton default.
+- Keep the terminal visual default aligned with the current repo baseline unless there is a clear reason to diverge.
+  The current expected default is a blackout theme with `MesloLGS NF` at `15px`, plus explicit Nerd Font symbol fallback for private-use icon glyphs.
 
 ## Verification
 
 ```bash
-bun run web:typecheck
-bun run test:unit
-bun run test:browser
-bun run web:build
+mise exec -- bun run web:typecheck
+mise exec -- bun run test:unit
+mise exec -- bun run test:browser
+mise exec -- bun run web:build
 ```

@@ -18,6 +18,7 @@ pub const SessionOptions = struct {
     cols: u16 = 80,
     rows: u16 = 24,
     command: ?[]const u8 = null,
+    shell: ?backends.ShellKind = null,
     token: ?[]const u8 = null,
 };
 

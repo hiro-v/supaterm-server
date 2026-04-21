@@ -14,6 +14,97 @@ fn configureTerminalEnv() void {
     if (setenv("CLICOLOR", "1", 1) != 0) std.process.exit(1);
 }
 
+pub fn parseShellKind(raw: []const u8) ?ShellKind {
+    if (std.mem.eql(u8, raw, "fish")) return .fish;
+    if (std.mem.eql(u8, raw, "zsh")) return .zsh;
+    if (std.mem.eql(u8, raw, "bash")) return .bash;
+    if (std.mem.eql(u8, raw, "sh")) return .sh;
+    return null;
+}
+
+pub fn shellKindLabel(kind: ShellKind) []const u8 {
+    return switch (kind) {
+        .fish => "fish",
+        .zsh => "zsh",
+        .bash => "bash",
+        .sh => "sh",
+    };
+}
+
+pub fn detectDefaultShellKind() ?ShellKind {
+    const shell_path = std.posix.getenv("SHELL") orelse return null;
+    return parseShellKind(std.fs.path.basename(shell_path));
+}
+
+pub fn collectShellAvailability(allocator: std.mem.Allocator) ![4]ShellAvailability {
+    return .{
+        .{ .kind = .fish, .path = try resolveShellPath(allocator, .fish) },
+        .{ .kind = .zsh, .path = try resolveShellPath(allocator, .zsh) },
+        .{ .kind = .bash, .path = try resolveShellPath(allocator, .bash) },
+        .{ .kind = .sh, .path = try resolveShellPath(allocator, .sh) },
+    };
+}
+
+pub fn deinitShellAvailability(
+    allocator: std.mem.Allocator,
+    availability: *[4]ShellAvailability,
+) void {
+    for (availability) |*entry| {
+        entry.deinit(allocator);
+    }
+}
+
+fn resolveRequestedShellPath(
+    allocator: std.mem.Allocator,
+    requested: ?ShellKind,
+) ![]const u8 {
+    if (requested) |shell| {
+        return (try resolveShellPath(allocator, shell)) orelse BackendError.ShellUnavailable;
+    }
+    return try allocator.dupe(u8, std.posix.getenv("SHELL") orelse "/bin/sh");
+}
+
+fn resolveShellPath(
+    allocator: std.mem.Allocator,
+    kind: ShellKind,
+) !?[]u8 {
+    const shell_name = shellKindLabel(kind);
+    if (std.posix.getenv("PATH")) |path_env| {
+        var it = std.mem.tokenizeScalar(u8, path_env, std.fs.path.delimiter);
+        while (it.next()) |dir| {
+            if (dir.len == 0) continue;
+            const candidate = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ dir, shell_name });
+            errdefer allocator.free(candidate);
+            if (isExecutable(candidate)) {
+                return candidate;
+            }
+            allocator.free(candidate);
+        }
+    }
+
+    const fallback_dirs = [_][]const u8{
+        "/bin",
+        "/usr/bin",
+        "/usr/local/bin",
+        "/opt/homebrew/bin",
+    };
+    for (fallback_dirs) |dir| {
+        const candidate = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ dir, shell_name });
+        errdefer allocator.free(candidate);
+        if (isExecutable(candidate)) {
+            return candidate;
+        }
+        allocator.free(candidate);
+    }
+
+    return null;
+}
+
+fn isExecutable(path: []const u8) bool {
+    std.posix.access(path, std.posix.X_OK) catch return false;
+    return true;
+}
+
 pub const BackendMode = enum {
     local,
     zmx,
@@ -23,12 +114,34 @@ pub const BackendOptions = struct {
     cols: u16 = 80,
     rows: u16 = 24,
     command: ?[]const u8 = null,
+    shell: ?ShellKind = null,
     shell_startup: LocalShellStartup = .fast,
 };
 
 pub const LocalShellStartup = enum {
     fast,
     full,
+};
+
+pub const ShellKind = enum {
+    fish,
+    zsh,
+    bash,
+    sh,
+};
+
+pub const ShellAvailability = struct {
+    kind: ShellKind,
+    path: ?[]u8,
+
+    pub fn isAvailable(self: ShellAvailability) bool {
+        return self.path != null;
+    }
+
+    pub fn deinit(self: *ShellAvailability, allocator: std.mem.Allocator) void {
+        if (self.path) |path| allocator.free(path);
+        self.* = undefined;
+    }
 };
 
 pub const ZmxClientOptions = struct {
@@ -44,6 +157,7 @@ pub const BackendError = error{
     BackendNotAlive,
     BackendReadError,
     BackendWriteError,
+    ShellUnavailable,
     InvalidSessionName,
     InvalidSessionType,
     SocketPathTooLong,
@@ -113,7 +227,8 @@ pub const LocalPtyBackend = struct {
 
         if (pid == 0) {
             configureTerminalEnv();
-            const shell = std.posix.getenv("SHELL") orelse "/bin/sh";
+            const shell = resolveRequestedShellPath(allocator, opts.shell) catch std.process.exit(1);
+            defer allocator.free(shell);
             const shell_txt = std.fmt.allocPrint(allocator, "{s}", .{shell}) catch std.process.exit(1);
             defer allocator.free(shell_txt);
             const shell_z = toCStr(allocator, shell_txt) catch std.process.exit(1);
@@ -575,6 +690,7 @@ fn spawnZmxSession(
     allocator: std.mem.Allocator,
     session_name: []const u8,
     command: ?[]const u8,
+    shell: ?ShellKind,
     cfg: ZmxClientOptions,
 ) !void {
     const binary_txt = try std.fmt.allocPrint(allocator, "{s}", .{cfg.binary});
@@ -592,15 +708,17 @@ fn spawnZmxSession(
         socket_dir_c = try toCStr(allocator, dir);
     }
 
+    const selected_shell = try resolveRequestedShellPath(allocator, shell);
+    defer allocator.free(selected_shell);
     var command_c: ?[:0]u8 = null;
     var shell_c: ?[:0]u8 = null;
     var shell_arg_c: ?[:0]u8 = null;
 
     if (command) |cmd| {
-        const shell = try toCStr(allocator, std.posix.getenv("SHELL") orelse "/bin/sh");
+        const shell_path = try toCStr(allocator, selected_shell);
         const shell_arg = try toCStr(allocator, "-c");
         const command_cstr = try toCStr(allocator, cmd);
-        shell_c = shell;
+        shell_c = shell_path;
         shell_arg_c = shell_arg;
         command_c = command_cstr;
     }
@@ -608,7 +726,7 @@ fn spawnZmxSession(
     defer if (command_c) |cmd| {
         allocator.free(cmd);
         if (shell_arg_c) |shell_arg| allocator.free(shell_arg);
-        if (shell_c) |shell| allocator.free(shell);
+        if (shell_c) |shell_path| allocator.free(shell_path);
     };
 
     const pid = posix.fork() catch |err| {
@@ -618,6 +736,8 @@ fn spawnZmxSession(
 
     if (pid == 0) {
         configureTerminalEnv();
+        const selected_shell_c = toCStr(allocator, selected_shell) catch std.process.exit(1);
+        defer allocator.free(selected_shell_c);
         const devnull = posix.open("/dev/null", .{ .ACCMODE = .RDWR }, 0) catch std.process.exit(1);
         defer posix.close(devnull);
         posix.dup2(devnull, posix.STDIN_FILENO) catch std.process.exit(1);
@@ -627,6 +747,9 @@ fn spawnZmxSession(
             if (setenv("ZMX_DIR", dir.ptr, 1) != 0) {
                 std.process.exit(1);
             }
+        }
+        if (setenv("SHELL", selected_shell_c.ptr, 1) != 0) {
+            std.process.exit(1);
         }
 
         if (command_c) |cmd| {
@@ -674,7 +797,7 @@ fn connectOrCreateZmxSocket(
     session_name: []const u8,
     socket_path: []const u8,
     socket_dir: []const u8,
-    command: ?[]const u8,
+    opts: BackendOptions,
     cfg: ZmxClientOptions,
 ) !posix.fd_t {
     var dir = try std.fs.openDirAbsolute(socket_dir, .{});
@@ -715,7 +838,7 @@ fn connectOrCreateZmxSocket(
 
     if (should_create) {
         std.log.warn("zmx session not found or stale, bootstrapping {s}", .{session_name});
-        try spawnZmxSession(allocator, session_name, command, cfg);
+        try spawnZmxSession(allocator, session_name, opts.command, opts.shell, cfg);
     }
 
     return connectToZmxSocketWithRetry(
@@ -751,7 +874,7 @@ pub fn createZmxBackend(
     const socket_path = try getSocketPath(allocator, socket_dir, resolved_name);
     errdefer allocator.free(socket_path);
 
-    const fd = connectOrCreateZmxSocket(allocator, resolved_name, socket_path, socket_dir, opts.command, cfg) catch {
+    const fd = connectOrCreateZmxSocket(allocator, resolved_name, socket_path, socket_dir, opts, cfg) catch {
         return BackendError.BackendSpawnFailed;
     };
 

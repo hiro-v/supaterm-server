@@ -53,6 +53,7 @@ export function mountWorkbenchView(root: HTMLDivElement): WorkbenchView {
             </div>
             <div class="header-toolbar">
               <div class="window-status" data-role="header-status"></div>
+              <button data-action="open-appearance" class="icon-button inline-icon subtle" aria-label="Open appearance settings" title="Appearance settings">${iconMarkup('theme')}</button>
               <button data-action="open-palette" class="icon-button inline-icon subtle" aria-label="Open command palette" title="Open command palette">${iconMarkup('command')}</button>
             </div>
           </header>

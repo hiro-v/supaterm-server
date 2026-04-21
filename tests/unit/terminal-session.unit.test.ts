@@ -11,7 +11,7 @@ describe('terminal session transport', () => {
 
     const connection = new TerminalSessionConnection({
       currentLocation: fakeLocation(),
-      session: { sessionId: 'session.a', token: null },
+      session: { sessionId: 'session.a', token: null, shell: 'system' },
       tokenResolver: async () => 'resolved-token',
       socketFactory: (url) => {
         expect(url).toContain('token=resolved-token');
@@ -41,7 +41,7 @@ describe('terminal session transport', () => {
 
     const connection = new TerminalSessionConnection({
       currentLocation: fakeLocation(),
-      session: { sessionId: 'session.b', token: 'preset' },
+      session: { sessionId: 'session.b', token: 'preset', shell: 'system' },
       messageDecoder: async (data) => `decoded:${String(data)}`,
       onSocketOpen: () => {
         events.push('socket-open');
@@ -72,7 +72,7 @@ describe('terminal session transport', () => {
 
     const connection = new TerminalSessionConnection({
       currentLocation: fakeLocation(),
-      session: { sessionId: 'session.c', token: 'preset' },
+      session: { sessionId: 'session.c', token: 'preset', shell: 'system' },
       onAttachTrace: (trace) => {
         traces.push(trace);
       },

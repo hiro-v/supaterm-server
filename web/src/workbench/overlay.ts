@@ -1,7 +1,9 @@
 import { type PaneView } from './panes';
 import { buildWorkbenchCommands, filterWorkbenchCommands, type CommandItem } from './commands';
+import { listFontPresetOptions, type WorkbenchAppearance } from './appearance';
 import { buildPaneSessionId, type PaneLeaf, type TabState, type WorkspaceState, type WorkbenchState } from './state';
 import { clamp, escapeAttribute, escapeHtml, formatMetric } from './shared';
+import type { PaneShell, ShellCapabilities } from '../session';
 
 export type DialogState =
   | {
@@ -31,6 +33,11 @@ export type DialogState =
   | {
       type: 'pane-info';
       paneId: string;
+      shell: PaneShell;
+    }
+  | {
+      type: 'appearance';
+      appearance: WorkbenchAppearance;
     }
   | {
       type: 'confirm-close';
@@ -50,6 +57,7 @@ type RenderOverlayOptions = {
   activePane: PaneLeaf;
   paneViews: Map<string, PaneView>;
   findPaneById: (paneId: string) => PaneLeaf | null;
+  shellCapabilities: ShellCapabilities | null;
 };
 
 export function getFilteredDialogCommands(
@@ -67,7 +75,7 @@ export function getFilteredDialogCommands(
 }
 
 export function renderWorkbenchOverlay(options: RenderOverlayOptions): void {
-  const { overlayRoot, dialog, state, activeWorkspace, activeTab, activePane, paneViews, findPaneById } = options;
+  const { overlayRoot, dialog, state, activeWorkspace, activeTab, activePane, paneViews, findPaneById, shellCapabilities } = options;
   overlayRoot.replaceChildren();
   if (!dialog) return;
 
@@ -119,6 +127,7 @@ export function renderWorkbenchOverlay(options: RenderOverlayOptions): void {
     const view = paneViews.get(dialog.paneId) ?? null;
     const telemetry = view?.client.getTelemetry() ?? null;
     const sessionId = pane ? buildPaneSessionId(activeWorkspace, activeTab, pane) : 'unknown';
+    const shellOptions = buildShellOptions(dialog.shell, shellCapabilities);
     panel.innerHTML = `
       <div class="overlay-panel info-panel">
         <div class="overlay-header">
@@ -129,6 +138,8 @@ export function renderWorkbenchOverlay(options: RenderOverlayOptions): void {
         <div class="info-grid">
           <div class="info-row"><span class="info-label">Pane</span><span>${escapeHtml(pane?.title ?? 'Unknown')}</span></div>
           <div class="info-row"><span class="info-label">Session</span><code>${escapeHtml(sessionId)}</code></div>
+          <div class="info-row"><span class="info-label">Shell</span><span>${escapeHtml(formatShellLabel(dialog.shell, shellCapabilities))}</span></div>
+          <div class="info-row info-row-select"><span class="info-label">Choose Shell</span><select class="overlay-select" data-action="pane-shell">${shellOptions}</select></div>
           <div class="info-row"><span class="info-label">Runtime</span><span>${escapeHtml(telemetry?.runtimeProfileId ?? 'Unknown')}</span></div>
           <div class="info-row"><span class="info-label">Visual Profile</span><span>${escapeHtml(telemetry?.visualProfileId ?? 'Unknown')}</span></div>
           <div class="info-row"><span class="info-label">Theme</span><span>${escapeHtml(telemetry?.themeId ?? 'Unknown')}</span></div>
@@ -175,7 +186,77 @@ export function renderWorkbenchOverlay(options: RenderOverlayOptions): void {
         </div>
         </div>
         <div class="overlay-actions">
-          <button data-action="dialog-cancel" class="overlay-button primary">Close</button>
+          <button data-action="dialog-cancel" class="overlay-button secondary">Close</button>
+          <button data-action="dialog-submit" class="overlay-button primary">Apply</button>
+        </div>
+      </div>
+    `;
+  } else if (dialog.type === 'appearance') {
+    panel.innerHTML = `
+      <div class="overlay-panel appearance-panel">
+        <div class="overlay-header">
+          <div class="overlay-heading">Appearance</div>
+          <button data-action="dialog-cancel" class="overlay-close" aria-label="Close dialog" title="Close dialog">×</button>
+        </div>
+        <div class="info-body">
+          <div class="appearance-grid">
+            <label class="appearance-field">
+              <span class="info-label">Font Preset</span>
+              <select class="overlay-select" data-action="appearance-field" data-appearance-field="fontPreset">
+                ${buildFontPresetOptions(dialog.appearance.fontPreset)}
+              </select>
+            </label>
+            <label class="appearance-field">
+              <span class="info-label">Custom Font Family</span>
+              <input
+                class="overlay-input compact"
+                data-action="appearance-field"
+                data-appearance-field="fontFamily"
+                value="${escapeAttribute(dialog.appearance.fontFamily)}"
+                placeholder='"MesloLGS NF", monospace'
+              />
+            </label>
+            <label class="appearance-field">
+              <span class="info-label">Font Size</span>
+              <input
+                class="overlay-input compact"
+                data-action="appearance-field"
+                data-appearance-field="fontSize"
+                type="number"
+                min="11"
+                max="32"
+                value="${escapeAttribute(String(dialog.appearance.fontSize))}"
+              />
+            </label>
+            <label class="appearance-field">
+              <span class="info-label">Cursor Blink</span>
+              <select class="overlay-select" data-action="appearance-field" data-appearance-field="cursorBlink">
+                <option value="true"${dialog.appearance.cursorBlink ? ' selected' : ''}>Enabled</option>
+                <option value="false"${dialog.appearance.cursorBlink ? '' : ' selected'}>Disabled</option>
+              </select>
+            </label>
+          </div>
+          <div class="appearance-section">
+            <div class="appearance-section-title">Terminal Colors</div>
+            <div class="appearance-color-grid">
+              ${buildColorField('Background', 'theme.background', dialog.appearance.theme.background)}
+              ${buildColorField('Foreground', 'theme.foreground', dialog.appearance.theme.foreground)}
+              ${buildColorField('Cursor', 'theme.cursor', dialog.appearance.theme.cursor)}
+              ${buildColorField('Selection BG', 'theme.selectionBackground', dialog.appearance.theme.selectionBackground)}
+              ${buildColorField('Selection FG', 'theme.selectionForeground', dialog.appearance.theme.selectionForeground)}
+              ${buildColorField('Red', 'theme.red', dialog.appearance.theme.red)}
+              ${buildColorField('Green', 'theme.green', dialog.appearance.theme.green)}
+              ${buildColorField('Yellow', 'theme.yellow', dialog.appearance.theme.yellow)}
+              ${buildColorField('Blue', 'theme.blue', dialog.appearance.theme.blue)}
+              ${buildColorField('Magenta', 'theme.magenta', dialog.appearance.theme.magenta)}
+              ${buildColorField('Cyan', 'theme.cyan', dialog.appearance.theme.cyan)}
+              ${buildColorField('White', 'theme.white', dialog.appearance.theme.white)}
+            </div>
+          </div>
+        </div>
+        <div class="overlay-actions">
+          <button data-action="dialog-cancel" class="overlay-button secondary">Cancel</button>
+          <button data-action="dialog-submit" class="overlay-button primary">Apply</button>
         </div>
       </div>
     `;
@@ -243,12 +324,59 @@ function formatBoolean(value: boolean | null | undefined): string {
   return value ? 'Enabled' : 'Disabled';
 }
 
+function buildFontPresetOptions(selected: WorkbenchAppearance['fontPreset']): string {
+  return listFontPresetOptions().map((option) => `
+    <option value="${escapeAttribute(option.id)}"${option.id === selected ? ' selected' : ''}>
+      ${escapeHtml(option.label)}
+    </option>
+  `).join('');
+}
+
+function buildColorField(label: string, field: string, value: string): string {
+  return `
+    <label class="appearance-color-field">
+      <span class="info-label">${escapeHtml(label)}</span>
+      <span class="appearance-color-control">
+        <input
+          class="appearance-color"
+          data-action="appearance-field"
+          data-appearance-field="${escapeAttribute(field)}"
+          type="color"
+          value="${escapeAttribute(value)}"
+        />
+        <code>${escapeHtml(value)}</code>
+      </span>
+    </label>
+  `;
+}
+
 function focusOverlayInput(overlayRoot: HTMLDivElement): void {
   queueMicrotask(() => {
     const input = overlayRoot.querySelector<HTMLInputElement>('.overlay-input');
-    input?.focus();
     if (input) {
+      input.focus();
       input.setSelectionRange(input.value.length, input.value.length);
+      return;
     }
+    overlayRoot.querySelector<HTMLSelectElement>('.overlay-select')?.focus();
   });
+}
+
+function buildShellOptions(selected: PaneShell, capabilities: ShellCapabilities | null): string {
+  const supported: PaneShell[] = ['system', 'fish', 'zsh', 'bash', 'sh'];
+  return supported.map((shell) => {
+    const available = shell === 'system' ? true : (capabilities?.shells.find((entry) => entry.id === shell)?.available ?? false);
+    const label = formatShellLabel(shell, capabilities);
+    const disabled = !available && shell !== selected ? ' disabled' : '';
+    const isSelected = shell === selected ? ' selected' : '';
+    return `<option value="${escapeAttribute(shell)}"${isSelected}${disabled}>${escapeHtml(label)}</option>`;
+  }).join('');
+}
+
+function formatShellLabel(shell: PaneShell, capabilities: ShellCapabilities | null): string {
+  if (shell === 'system') {
+    return capabilities?.default_shell ? `System Default (${capabilities.default_shell})` : 'System Default';
+  }
+  const available = capabilities?.shells.find((entry) => entry.id === shell)?.available ?? false;
+  return available ? shell : `${shell} (missing)`;
 }

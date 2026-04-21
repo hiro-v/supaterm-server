@@ -8,6 +8,20 @@ export type SessionQuery = {
 export type SessionConnectionDetails = {
   sessionId: string;
   token: string | null;
+  shell: PaneShell;
+};
+
+export type PaneShell = 'system' | 'fish' | 'zsh' | 'bash' | 'sh';
+
+export type ShellCapability = {
+  id: Exclude<PaneShell, 'system'>;
+  available: boolean;
+  path: string | null;
+};
+
+export type ShellCapabilities = {
+  default_shell: Exclude<PaneShell, 'system'> | null;
+  shells: ShellCapability[];
 };
 
 export type ApiIdentity = {
@@ -64,6 +78,7 @@ export function buildSessionWebSocketUrl(
   currentLocation: Location,
   sessionId: string,
   token: string | null,
+  shell: PaneShell,
   cols: number,
   rows: number,
 ): string {
@@ -76,6 +91,9 @@ export function buildSessionWebSocketUrl(
 
   if (token) {
     query.set('token', token);
+  }
+  if (shell !== 'system') {
+    query.set('shell', shell);
   }
 
   return `${protocol}://${currentLocation.host}/api/sessions/${pathSession}/ws?${query.toString()}`;
@@ -151,6 +169,14 @@ export async function resolveSessionToken(
 
   const grant = await getShareGrant(currentLocation, connection.sessionId);
   return grant.token || null;
+}
+
+export async function getShellCapabilities(currentLocation: Location): Promise<ShellCapabilities> {
+  const response = await fetch(buildServerApiUrl(currentLocation, '/api/capabilities/shells'));
+  if (!response.ok) {
+    throw new Error(`Failed to load shell capabilities (${response.status})`);
+  }
+  return await response.json() as ShellCapabilities;
 }
 
 async function getSessionMetadata(currentLocation: Location, sessionId: string): Promise<SessionMetadata> {

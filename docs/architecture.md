@@ -25,6 +25,7 @@ Server:
 - `src/session_manager.zig`: session lifecycle, attach policy, auth/share injection seams
 - `src/session_http.zig`: canonical path and payload contract
 - `src/session_backends.zig`: local PTY backend, local shell-startup policy, and `zmx` adapter
+- `src/session_backends.zig`: local PTY backend, local shell-startup policy, host shell capability discovery, and `zmx` adapter
 - `src/workbench_store.zig`: SQLite-backed shared workbench snapshot store
 - `src/parse_utils.zig`: shared Zig parsing helpers
 
@@ -32,6 +33,7 @@ Web:
 - `web/src/main.ts`: bootstrap
 - `web/src/workbench.ts`: workbench controller and event orchestration
 - `web/src/workbench/state.ts`: pure layout tree and workbench state model
+- `web/src/workbench/appearance.ts`: persisted appearance model, font presets, and visual-config bridge
 - `web/src/workbench/actions.ts`: workbench mutations, dialog builders, and active selection helpers
 - `web/src/workbench/persistence.ts`: injected persistence boundary, local cache, and server snapshot hydration/persist
 - `web/src/workbench/commands.ts`: command model and filtering
@@ -46,6 +48,7 @@ Web:
 - `web/src/workbench/panes.ts`: pane tree rendering with injected pane client/session seams
 - `web/src/perf.ts`: browser-side startup marks used by perf collection
 - `web/src/session.ts`: session URL and message helpers
+- `web/src/session.ts`: session URL rules, host shell capability fetch, and session metadata helpers
 - `web/src/terminal-session.ts`: WebSocket session transport, token resolution, and resize-frame discipline
 - `web/src/terminal-client.ts`: `libghosty` terminal adapter, reconnect logic, hydration replay, and telemetry
 - `web/src/terminal-hydration.ts`: optional browser-local transcript cache for same-browser reconnect convenience
@@ -72,6 +75,18 @@ The project is split so the same Zig runtime can work in:
 Local PTY sessions also keep shell startup policy explicit:
 - `fast`: default for browser-first latency, skipping user init files on supported shells
 - `full`: preserves the user shell's full interactive init path
+
+Per-pane shell selection also stays explicit:
+- the browser persists a pane shell choice in workbench state
+- pane session identity includes that shell choice so reconnects reuse the correct backend session
+- the server advertises host shell availability through `/api/capabilities/shells`
+- unavailable shells stay visible in the UI but disabled unless already selected in persisted state
+
+Workbench appearance stays explicit too:
+- terminal theme/font preferences live inside persisted `WorkbenchState`
+- the workbench rebuilds its runtime/chrome surface when appearance changes
+- local storage keeps the fast browser cache
+- the SQLite-backed shared snapshot keeps the cross-browser source of truth
 
 The browser app is split so the same terminal/session contract can support:
 - the current workbench shell,
@@ -120,7 +135,7 @@ Current shared-layout rule:
 ## Source of Truth
 
 Use these docs together:
-- [docs/stack.md](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/docs/stack.md)
-- [docs/tools.md](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/docs/tools.md)
-- [docs/data-contracts.md](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/docs/data-contracts.md)
-- [docs/upstream-learnings.md](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/docs/upstream-learnings.md)
+- [docs/stack.md](stack.md)
+- [docs/tools.md](tools.md)
+- [docs/data-contracts.md](data-contracts.md)
+- [docs/upstream-learnings.md](upstream-learnings.md)

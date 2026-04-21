@@ -17,6 +17,7 @@ export type ClickIntent =
         | 'rename-workspace'
         | 'close-workspace'
         | 'toggle-sidebar'
+        | 'open-appearance'
         | 'open-palette'
         | 'dialog-cancel'
         | 'dialog-submit';
@@ -108,6 +109,7 @@ export function resolveClickIntent(target: HTMLElement | null): ClickIntent | nu
     case 'rename-workspace':
     case 'close-workspace':
     case 'toggle-sidebar':
+    case 'open-appearance':
     case 'open-palette':
     case 'dialog-cancel':
     case 'dialog-submit':

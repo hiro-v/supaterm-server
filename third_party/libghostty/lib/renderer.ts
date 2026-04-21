@@ -87,6 +87,10 @@ export const DEFAULT_THEME: Required<ITheme> = {
   brightWhite: '#ffffff',
 };
 
+const KITTY_UNICODE_PLACEHOLDER = 0x10eeee;
+const NERD_SYMBOL_FONT_STACK =
+  '"Symbols Nerd Font Mono", "JetBrainsMono Nerd Font", "SauceCodePro Nerd Font", "Hack Nerd Font", "MesloLGS NF", monospace';
+
 // ============================================================================
 // CanvasRenderer Class
 // ============================================================================
@@ -554,6 +558,10 @@ export class CanvasRenderer {
     const cellY = y * this.metrics.height;
     const cellWidth = this.metrics.width * cell.width;
 
+    if (cell.codepoint === KITTY_UNICODE_PLACEHOLDER) {
+      return;
+    }
+
     // Check if this cell is selected
     const isSelected = this.isInSelection(x, y);
 
@@ -599,14 +607,37 @@ export class CanvasRenderer {
       return;
     }
 
+    // Kitty graphics unicode placeholders are layout anchors for the image
+    // overlay and should not be painted as visible text glyphs.
+    if (cell.codepoint === KITTY_UNICODE_PLACEHOLDER) {
+      return;
+    }
+
     // Check if this cell is selected
     const isSelected = this.isInSelection(x, y);
 
-    // Set text style
+    // Draw text
+    const textX = cellX;
+    const textY = cellY + this.metrics.baseline;
+
+    // Get the character to render - use grapheme lookup for complex scripts
+    let char: string;
+    if (cell.grapheme_len > 0 && this.currentBuffer?.getGraphemeString) {
+      // Cell has additional codepoints - get full grapheme cluster
+      char = this.currentBuffer.getGraphemeString(y, x);
+    } else {
+      // Simple cell - single codepoint
+      char = String.fromCodePoint(cell.codepoint || 32); // Default to space if null
+    }
+
+    // Set text style after we know the glyph so we can switch to an explicit
+    // Nerd Font symbol stack for private-use icon cells. Browser fallback is
+    // inconsistent here because some mono fonts claim empty PUA glyphs.
     let fontStyle = '';
     if (cell.flags & CellFlags.ITALIC) fontStyle += 'italic ';
     if (cell.flags & CellFlags.BOLD) fontStyle += 'bold ';
-    this.ctx.font = `${fontStyle}${this.fontSize}px ${this.fontFamily}`;
+    const fontFamily = containsPrivateUseGlyph(char) ? NERD_SYMBOL_FONT_STACK : this.fontFamily;
+    this.ctx.font = `${fontStyle}${this.fontSize}px ${fontFamily}`;
 
     // Set text color - use override, selection foreground, or normal color
     if (colorOverride) {
@@ -634,19 +665,6 @@ export class CanvasRenderer {
       this.ctx.globalAlpha = 0.5;
     }
 
-    // Draw text
-    const textX = cellX;
-    const textY = cellY + this.metrics.baseline;
-
-    // Get the character to render - use grapheme lookup for complex scripts
-    let char: string;
-    if (cell.grapheme_len > 0 && this.currentBuffer?.getGraphemeString) {
-      // Cell has additional codepoints - get full grapheme cluster
-      char = this.currentBuffer.getGraphemeString(y, x);
-    } else {
-      // Simple cell - single codepoint
-      char = String.fromCodePoint(cell.codepoint || 32); // Default to space if null
-    }
     this.ctx.fillText(char, textX, textY);
 
     // Reset alpha
@@ -998,4 +1016,20 @@ export class CanvasRenderer {
   public dispose(): void {
     this.stopCursorBlink();
   }
+}
+
+function containsPrivateUseGlyph(value: string): boolean {
+  for (const char of value) {
+    const codepoint = char.codePointAt(0);
+    if (codepoint == null) continue;
+    if (
+      (codepoint >= 0xe000 && codepoint <= 0xf8ff) ||
+      (codepoint >= 0xf0000 && codepoint <= 0xffffd) ||
+      (codepoint >= 0x100000 && codepoint <= 0x10fffd)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }

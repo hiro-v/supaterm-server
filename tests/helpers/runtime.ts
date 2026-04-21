@@ -151,6 +151,7 @@ export async function openTerminalSession(options: {
   port: number;
   sessionId: string;
   token?: string | null;
+  shell?: 'fish' | 'zsh' | 'bash' | 'sh';
   command?: string;
   completionMarker?: string;
   startupCommand?: string;
@@ -166,6 +167,7 @@ export async function openTerminalSessionWithTrace(options: {
   port: number;
   sessionId: string;
   token?: string | null;
+  shell?: 'fish' | 'zsh' | 'bash' | 'sh';
   command?: string;
   completionMarker?: string;
   startupCommand?: string;
@@ -178,6 +180,7 @@ export async function openTerminalSessionWithTrace(options: {
     rows: '24',
   });
   if (options.token) query.set('token', options.token);
+  if (options.shell) query.set('shell', options.shell);
   if (options.startupCommand) query.set('command', options.startupCommand);
 
   return await new Promise((resolve, reject) => {

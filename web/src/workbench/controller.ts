@@ -3,6 +3,7 @@ import type { KeyboardIntent } from './intents';
 export type WorkbenchCommandHandlers = {
   addTab(): void;
   toggleSidebar(): void;
+  openAppearanceDialog(): void;
   openRenameTabDialog(): void;
   openRenamePaneDialog(): void;
   openCloseTabDialog(): void;
@@ -20,6 +21,7 @@ export type WorkbenchCommandHandlers = {
 export type WorkbenchActionHandlers = {
   openCreateSpaceDialog(): void;
   addTab(): void;
+  openAppearanceDialog(): void;
   openRenameWorkspaceDialog(): void;
   openCloseWorkspaceDialog(): void;
   toggleSidebar(): void;
@@ -54,6 +56,9 @@ export function executeWorkbenchCommand(
       return;
     case 'toggle-sidebar':
       handlers.toggleSidebar();
+      return;
+    case 'open-appearance':
+      handlers.openAppearanceDialog();
       return;
     case 'rename-tab':
       handlers.openRenameTabDialog();
@@ -113,6 +118,7 @@ export function executeWorkbenchActionIntent(
     | 'rename-workspace'
     | 'close-workspace'
     | 'toggle-sidebar'
+    | 'open-appearance'
     | 'open-palette'
     | 'dialog-cancel'
     | 'dialog-submit',
@@ -133,6 +139,9 @@ export function executeWorkbenchActionIntent(
       return;
     case 'toggle-sidebar':
       handlers.toggleSidebar();
+      return;
+    case 'open-appearance':
+      handlers.openAppearanceDialog();
       return;
     case 'open-palette':
       handlers.openPalette();

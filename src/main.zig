@@ -320,7 +320,7 @@ fn printUsage() void {
 }
 
 fn printVersion() void {
-    std.log.info("supaterm-server 0.1.0", .{});
+    std.log.info("supaterm-server {s}", .{build_options.app_version});
 }
 
 fn parseListenAddress(raw: []const u8) !std.net.Address {
@@ -491,6 +491,30 @@ fn handleConnection(ctx: ConnContext) void {
         return;
     }
 
+    if (std.mem.eql(u8, request_path, "/api/capabilities/shells")) {
+        var availability = backends.collectShellAvailability(ctx.allocator) catch {
+            writeStatus(io_writer, 500, "Server Error", "text/plain", "Failed to detect shell capabilities") catch {};
+            io_writer.flush() catch {};
+            return;
+        };
+        defer backends.deinitShellAvailability(ctx.allocator, &availability);
+
+        const payload = session_http.ShellCapabilitiesPayload{
+            .default_shell = backends.detectDefaultShellKind(),
+            .availability = availability,
+        };
+        const body = payload.toJson(ctx.allocator) catch {
+            writeStatus(io_writer, 500, "Server Error", "text/plain", "Failed to serialize shell capabilities") catch {};
+            io_writer.flush() catch {};
+            return;
+        };
+        defer ctx.allocator.free(body);
+
+        writeStatus(io_writer, 200, "OK", "application/json", body) catch {};
+        io_writer.flush() catch {};
+        return;
+    }
+
     if (session_http.extractSessionShareId(request_path)) |raw_session_id| {
         if (!ctx.config.enable_share_api) {
             writeStatus(io_writer, 404, "Not Found", "text/plain", "Not found") catch {};
@@ -597,6 +621,9 @@ fn handleConnection(ctx: ConnContext) void {
             switch (err) {
                 ManagerError.Unauthorized => {
                     writeStatus(io_writer, 403, "Forbidden", "text/plain", "Unauthorized") catch {};
+                },
+                backends.BackendError.ShellUnavailable => {
+                    writeStatus(io_writer, 400, "Bad Request", "text/plain", "Requested shell unavailable") catch {};
                 },
                 error.OutOfMemory => {
                     writeStatus(io_writer, 500, "Server Error", "text/plain", "Out of memory") catch {};

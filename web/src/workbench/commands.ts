@@ -23,6 +23,12 @@ export function buildWorkbenchCommands(
       aliases: ['toggle sidebar', 'sidebar'],
     },
     {
+      id: 'open-appearance',
+      label: 'Appearance',
+      detail: `Edit theme and terminal font for ${workspace.name}`,
+      aliases: ['appearance', 'theme', 'font', 'terminal theme', 'terminal font'],
+    },
+    {
       id: 'new-tab',
       label: 'New Tab',
       detail: `Create a new tab in ${workspace.name}`,

@@ -1,0 +1,127 @@
+name: release-nightly
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    name: bump nightly version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+      tag: ${{ steps.bump.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-ci
+        with:
+          cache-key-suffix: nightly-${{ hashFiles('bun.lock', 'package.json', 'web/package.json', '.gitmodules', 'zlint.json', 'patches/libghosty/libghosty.patch', 'patches/zmx/zmx.patch') }}
+
+      - name: Bump patch version and tag nightly release
+        id: bump
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(bun run --silent version:bump:patch)"
+          TAG="v${VERSION}-nightly"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json web/package.json
+          git commit -m "chore(release): bump nightly version to ${VERSION}"
+          git tag -a "${TAG}" -m "Nightly ${VERSION}"
+          git push origin HEAD:main
+          git push origin "${TAG}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: nightly build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    needs:
+      - prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          submodules: recursive
+
+      - name: Compute cache key inputs
+        id: cache_key
+        shell: bash
+        run: |
+          echo "libghostty=$(git rev-parse HEAD:third_party/libghostty/ghostty)" >> "$GITHUB_OUTPUT"
+          echo "zmx=$(git rev-parse HEAD:third_party/zmx)" >> "$GITHUB_OUTPUT"
+
+      - uses: ./.github/actions/setup-ci
+        with:
+          cache-key-suffix: ${{ hashFiles('bun.lock', 'package.json', 'web/package.json', '.gitmodules', 'zlint.json', 'patches/libghosty/libghosty.patch', 'patches/zmx/zmx.patch') }}-${{ steps.cache_key.outputs.libghostty }}-${{ steps.cache_key.outputs.zmx }}
+
+      - name: Build embedded release binary
+        shell: bash
+        run: |
+          zig build --release=small -Dembed-assets=true
+
+      - name: Package release artifacts
+        shell: bash
+        run: |
+          sh ./scripts/package-release.sh "${{ needs.prepare.outputs.version }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nightly-${{ matrix.os }}
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+
+  release:
+    name: publish nightly prerelease
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    needs:
+      - prepare
+      - build
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish nightly prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "${{ needs.prepare.outputs.tag }}" \
+            --prerelease \
+            --title "Supaterm Nightly v${{ needs.prepare.outputs.version }}" \
+            --notes "Nightly patch release for v${{ needs.prepare.outputs.version }}." \
+            dist/* \
+            -R "${GITHUB_REPOSITORY}" 2>/dev/null || \
+          gh release edit "${{ needs.prepare.outputs.tag }}" \
+            --prerelease \
+            --title "Supaterm Nightly v${{ needs.prepare.outputs.version }}" \
+            --notes "Nightly patch release for v${{ needs.prepare.outputs.version }}." \
+            -R "${GITHUB_REPOSITORY}"
+          gh release upload "${{ needs.prepare.outputs.tag }}" dist/* --clobber -R "${GITHUB_REPOSITORY}"

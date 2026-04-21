@@ -11,6 +11,7 @@ describe('workbench controller dispatch', () => {
     executeWorkbenchCommand('split-right', {
       addTab: () => calls.push('addTab'),
       toggleSidebar: () => calls.push('toggleSidebar'),
+      openAppearanceDialog: () => calls.push('openAppearanceDialog'),
       openRenameTabDialog: () => calls.push('openRenameTabDialog'),
       openRenamePaneDialog: () => calls.push('openRenamePaneDialog'),
       openCloseTabDialog: () => calls.push('openCloseTabDialog'),
@@ -27,6 +28,24 @@ describe('workbench controller dispatch', () => {
     executeWorkbenchCommand('select-space:ws.2', {
       addTab: () => calls.push('addTab'),
       toggleSidebar: () => calls.push('toggleSidebar'),
+      openAppearanceDialog: () => calls.push('openAppearanceDialog'),
+      openRenameTabDialog: () => calls.push('openRenameTabDialog'),
+      openRenamePaneDialog: () => calls.push('openRenamePaneDialog'),
+      openCloseTabDialog: () => calls.push('openCloseTabDialog'),
+      splitActivePane: (axis, placement) => calls.push(`split:${axis}:${placement}`),
+      openCreateSpaceDialog: () => calls.push('openCreateSpaceDialog'),
+      openRenameWorkspaceDialog: () => calls.push('openRenameWorkspaceDialog'),
+      openCloseWorkspaceDialog: () => calls.push('openCloseWorkspaceDialog'),
+      nextTab: () => calls.push('nextTab'),
+      previousTab: () => calls.push('previousTab'),
+      selectTab: (tabId) => calls.push(`tab:${tabId}`),
+      selectWorkspace: (workspaceId) => calls.push(`space:${workspaceId}`),
+      renderOverlay: () => calls.push('renderOverlay'),
+    });
+    executeWorkbenchCommand('open-appearance', {
+      addTab: () => calls.push('addTab'),
+      toggleSidebar: () => calls.push('toggleSidebar'),
+      openAppearanceDialog: () => calls.push('openAppearanceDialog'),
       openRenameTabDialog: () => calls.push('openRenameTabDialog'),
       openRenamePaneDialog: () => calls.push('openRenamePaneDialog'),
       openCloseTabDialog: () => calls.push('openCloseTabDialog'),
@@ -41,7 +60,7 @@ describe('workbench controller dispatch', () => {
       renderOverlay: () => calls.push('renderOverlay'),
     });
 
-    expect(calls).toEqual(['split:row:after', 'space:ws.2']);
+    expect(calls).toEqual(['split:row:after', 'space:ws.2', 'openAppearanceDialog']);
   });
 
   test('maps action and keyboard intents onto focused handlers', () => {
@@ -49,6 +68,7 @@ describe('workbench controller dispatch', () => {
     executeWorkbenchActionIntent('dialog-submit', {
       openCreateSpaceDialog: () => calls.push('openCreate'),
       addTab: () => calls.push('addTab'),
+      openAppearanceDialog: () => calls.push('appearance'),
       openRenameWorkspaceDialog: () => calls.push('renameWorkspace'),
       openCloseWorkspaceDialog: () => calls.push('closeWorkspace'),
       toggleSidebar: () => calls.push('toggleSidebar'),

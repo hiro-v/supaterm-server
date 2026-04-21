@@ -28,12 +28,18 @@ fi
 # Apply patch
 echo "🔧 Applying WASM API patch..."
 cd ghostty
-git apply --check ../patches/ghostty-wasm-api.patch || {
-    echo "❌ Patch doesn't apply cleanly"
-    echo "Ghostty may have changed. Check patches/ghostty-wasm-api.patch"
-    exit 1
-}
-git apply ../patches/ghostty-wasm-api.patch
+PATCH_ALREADY_APPLIED=0
+if git apply --reverse --check ../patches/ghostty-wasm-api.patch >/dev/null 2>&1; then
+    echo "✓ WASM API patch already applied"
+    PATCH_ALREADY_APPLIED=1
+else
+    git apply --check ../patches/ghostty-wasm-api.patch || {
+        echo "❌ Patch doesn't apply cleanly"
+        echo "Ghostty may have changed. Check patches/ghostty-wasm-api.patch"
+        exit 1
+    }
+    git apply ../patches/ghostty-wasm-api.patch
+fi
 
 # Build WASM
 echo "⚙️  Building WASM (takes ~20 seconds)..."
@@ -46,10 +52,12 @@ cp ghostty/zig-out/bin/ghostty-vt.wasm ./
 # Revert patch to keep submodule clean
 echo "🧹 Cleaning up..."
 cd ghostty
-git apply -R ../patches/ghostty-wasm-api.patch
-# Remove new files created by the patch
-rm -f include/ghostty/vt/terminal.h
-rm -f src/terminal/c/terminal.zig
+if [ "$PATCH_ALREADY_APPLIED" -eq 0 ]; then
+    git apply -R ../patches/ghostty-wasm-api.patch
+    # Remove new files created by the patch
+    rm -f include/ghostty/vt/terminal.h
+    rm -f src/terminal/c/terminal.zig
+fi
 cd ..
 
 SIZE=$(du -h ghostty-vt.wasm | cut -f1)

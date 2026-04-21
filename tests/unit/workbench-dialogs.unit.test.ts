@@ -78,6 +78,16 @@ describe('workbench dialog helpers', () => {
     expect(submitWorkbenchDialog(state, {
       type: 'pane-info',
       paneId,
-    }, 'seed')).toEqual({ kind: 'close' });
+      shell: 'system',
+    }, 'seed')).toEqual({ kind: 'commit', disposedPaneIds: [] });
+
+    expect(submitWorkbenchDialog(state, {
+      type: 'appearance',
+      appearance: {
+        ...state.appearance,
+        fontSize: 18,
+      },
+    }, 'seed')).toEqual({ kind: 'commit', disposedPaneIds: [] });
+    expect(state.appearance.fontSize).toBe(18);
   });
 });

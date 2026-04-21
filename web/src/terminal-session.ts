@@ -81,6 +81,7 @@ export class TerminalSessionConnection {
         this.currentLocation,
         this.session.sessionId,
         token,
+        this.session.shell,
         initialSize.cols,
         initialSize.rows,
       ),

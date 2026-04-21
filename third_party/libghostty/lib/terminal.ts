@@ -31,6 +31,7 @@ import type {
   ITerminalOptions,
   IUnicodeVersionProvider,
 } from './interfaces';
+import { KittyImageOverlay } from './kitty-image-overlay';
 import { LinkDetector } from './link-detector';
 import { OSC8LinkProvider } from './providers/osc8-link-provider';
 import { UrlRegexProvider } from './providers/url-regex-provider';
@@ -69,6 +70,7 @@ export class Terminal implements ITerminalCore {
   private inputHandler?: InputHandler;
   private selectionManager?: SelectionManager;
   private canvas?: HTMLCanvasElement;
+  private kittyImageOverlay?: KittyImageOverlay;
 
   // Link detection system
   private linkDetector?: LinkDetector;
@@ -251,7 +253,7 @@ export class Terminal implements ITerminalCore {
     this.canvas.style.height = `${metrics.height * this.rows}px`;
 
     // Force full re-render with new font
-    this.renderer.render(this.wasmTerm, true, this.viewportY, this);
+    this.renderFrame(true);
   }
 
   /**
@@ -424,9 +426,12 @@ export class Terminal implements ITerminalCore {
         cursorBlink: this.options.cursorBlink,
         theme: this.options.theme,
       });
+      this.kittyImageOverlay = new KittyImageOverlay();
+      this.kittyImageOverlay.mount(parent, this.canvas);
 
       // Size canvas to terminal dimensions (use renderer.resize for proper DPI scaling)
       this.renderer.resize(this.cols, this.rows);
+      this.syncKittyImageOverlay();
 
       // Create mouse tracking configuration
       const canvas = this.canvas;
@@ -520,7 +525,7 @@ export class Terminal implements ITerminalCore {
       parent.addEventListener('wheel', this.handleWheel, { passive: false, capture: true });
 
       // Render initial blank screen (force full redraw)
-      this.renderer.render(this.wasmTerm, true, this.viewportY, this, this.scrollbarOpacity);
+      this.renderFrame(true, this.scrollbarOpacity);
 
       // Start render loop
       this.startRenderLoop();
@@ -693,7 +698,7 @@ export class Terminal implements ITerminalCore {
       this.resizeEmitter.fire({ cols, rows });
 
       // Force full render
-      this.renderer!.render(this.wasmTerm!, true, this.viewportY, this);
+      this.renderFrame(true);
     } catch (e) {
       console.error('Terminal resize failed:', e);
     }
@@ -727,6 +732,7 @@ export class Terminal implements ITerminalCore {
 
     // Clear renderer
     this.renderer!.clear();
+    this.kittyImageOverlay?.clear();
 
     // Reset title
     this.currentTitle = '';
@@ -1163,7 +1169,7 @@ export class Terminal implements ITerminalCore {
         // 1. Calls update() once to sync state and check dirty flags
         // 2. Only redraws dirty rows when forceAll=false
         // 3. Always calls clearDirty() at the end
-        this.renderer!.render(this.wasmTerm!, false, this.viewportY, this, this.scrollbarOpacity);
+        this.renderFrame(false, this.scrollbarOpacity);
 
         // Check for cursor movement (Phase 2: onCursorMove event)
         // Note: getCursor() reads from already-updated render state (from render() above)
@@ -1181,6 +1187,19 @@ export class Terminal implements ITerminalCore {
       }
     };
     loop();
+  }
+
+  private renderFrame(forceAll: boolean, scrollbarOpacity: number = this.scrollbarOpacity): void {
+    if (!this.renderer || !this.wasmTerm) return;
+    this.renderer.render(this.wasmTerm, forceAll, this.viewportY, this, scrollbarOpacity);
+    this.syncKittyImageOverlay();
+  }
+
+  private syncKittyImageOverlay(): void {
+    if (!this.kittyImageOverlay || !this.renderer || !this.wasmTerm) return;
+    const metrics = this.renderer.getMetrics();
+    this.wasmTerm.setPixelSize(metrics.width * this.cols, metrics.height * this.rows);
+    this.kittyImageOverlay.render(this.wasmTerm, metrics, this.cols, this.rows);
   }
 
   /**
@@ -1222,6 +1241,9 @@ export class Terminal implements ITerminalCore {
       this.renderer.dispose();
       this.renderer = undefined;
     }
+
+    this.kittyImageOverlay?.dispose();
+    this.kittyImageOverlay = undefined;
 
     // Remove canvas from DOM
     if (this.canvas && this.canvas.parentNode) {
@@ -1770,7 +1792,7 @@ export class Terminal implements ITerminalCore {
 
       // Trigger render to show updated opacity
       if (this.renderer && this.wasmTerm) {
-        this.renderer.render(this.wasmTerm, false, this.viewportY, this, this.scrollbarOpacity);
+        this.renderFrame(false, this.scrollbarOpacity);
       }
 
       if (progress < 1) {
@@ -1793,7 +1815,7 @@ export class Terminal implements ITerminalCore {
 
       // Trigger render to show updated opacity
       if (this.renderer && this.wasmTerm) {
-        this.renderer.render(this.wasmTerm, false, this.viewportY, this, this.scrollbarOpacity);
+        this.renderFrame(false, this.scrollbarOpacity);
       }
 
       if (progress < 1) {
@@ -1803,7 +1825,7 @@ export class Terminal implements ITerminalCore {
         this.scrollbarOpacity = 0;
         // Final render to clear scrollbar completely
         if (this.renderer && this.wasmTerm) {
-          this.renderer.render(this.wasmTerm, false, this.viewportY, this, 0);
+          this.renderFrame(false, 0);
         }
       }
     };

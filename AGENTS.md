@@ -5,11 +5,11 @@ Use this repository as a Zig-first terminal server with a Bun/TypeScript web cli
 ## Start Here
 
 Read in this order:
-1. [README.md](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/README.md)
-2. [docs/architecture.md](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/docs/architecture.md)
-3. [docs/data-contracts.md](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/docs/data-contracts.md)
-4. [docs/tools.md](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/docs/tools.md)
-5. [docs/upstream-learnings.md](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/docs/upstream-learnings.md)
+1. [README.md](README.md)
+2. [docs/architecture.md](docs/architecture.md)
+3. [docs/data-contracts.md](docs/data-contracts.md)
+4. [docs/tools.md](docs/tools.md)
+5. [docs/upstream-learnings.md](docs/upstream-learnings.md)
 
 Then use the local skill pack under `.agent/skills/`.
 
@@ -53,8 +53,8 @@ Run the smallest proof that matches the change:
 ## Skills
 
 Default local skills live in:
-- [.agent/README.md](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/.agent/README.md)
-- [.agent/skills/zig-server.md](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/.agent/skills/zig-server.md)
-- [.agent/skills/web-ui.md](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/.agent/skills/web-ui.md)
-- [.agent/skills/vendored-deps.md](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/.agent/skills/vendored-deps.md)
-- [.agent/skills/verification.md](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/.agent/skills/verification.md)
+- [.agent/README.md](.agent/README.md)
+- [.agent/skills/zig-server.md](.agent/skills/zig-server.md)
+- [.agent/skills/web-ui.md](.agent/skills/web-ui.md)
+- [.agent/skills/vendored-deps.md](.agent/skills/vendored-deps.md)
+- [.agent/skills/verification.md](.agent/skills/verification.md)

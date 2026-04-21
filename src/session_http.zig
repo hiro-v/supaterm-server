@@ -2,6 +2,7 @@ const std = @import("std");
 const SessionManager = @import("session_manager.zig").SessionManager;
 const SessionOptions = @import("session_manager.zig").SessionOptions;
 const ShareGrant = @import("session_manager.zig").ShareGrant;
+const backends = @import("session_backends.zig");
 const parse_utils = @import("parse_utils.zig");
 const tokenPolicyLabel = @import("session_manager.zig").tokenPolicyLabel;
 const shareAuthorityLabel = @import("session_manager.zig").shareAuthorityLabel;
@@ -162,6 +163,41 @@ pub const WorkbenchSnapshotPayload = struct {
     }
 };
 
+pub const ShellCapabilitiesPayload = struct {
+    default_shell: ?backends.ShellKind,
+    availability: [4]backends.ShellAvailability,
+
+    pub fn toJson(self: ShellCapabilitiesPayload, allocator: std.mem.Allocator) ![]u8 {
+        var body = std.array_list.Managed(u8).init(allocator);
+        errdefer body.deinit();
+        const writer = body.writer();
+
+        try writer.writeAll("{\"default_shell\":");
+        if (self.default_shell) |shell| {
+            try writer.print("{f}", .{std.json.fmt(backends.shellKindLabel(shell), .{})});
+        } else {
+            try writer.writeAll("null");
+        }
+        try writer.writeAll(",\"shells\":[");
+        for (self.availability, 0..) |entry, index| {
+            if (index > 0) try writer.writeByte(',');
+            try writer.writeAll("{\"id\":");
+            try writer.print("{f}", .{std.json.fmt(backends.shellKindLabel(entry.kind), .{})});
+            try writer.writeAll(",\"available\":");
+            try writer.writeAll(if (entry.isAvailable()) "true" else "false");
+            try writer.writeAll(",\"path\":");
+            if (entry.path) |path| {
+                try writer.print("{f}", .{std.json.fmt(path, .{})});
+            } else {
+                try writer.writeAll("null");
+            }
+            try writer.writeByte('}');
+        }
+        try writer.writeAll("]}");
+        return body.toOwnedSlice();
+    }
+};
+
 pub fn extractSessionWsId(path: []const u8) ?[]const u8 {
     if (std.mem.eql(u8, path, "/ws")) return "default";
     const prefix = "/api/sessions/";
@@ -244,6 +280,8 @@ pub fn parseSessionOptions(raw_query: []const u8) SessionOptions {
             if (parse_utils.parseU16(v)) |parsed| opts.rows = parsed;
         } else if (std.mem.eql(u8, k, "command")) {
             if (v.len > 0) opts.command = v;
+        } else if (std.mem.eql(u8, k, "shell")) {
+            if (backends.parseShellKind(v)) |shell| opts.shell = shell;
         } else if (std.mem.eql(u8, k, "token")) {
             if (v.len > 0) opts.token = v;
         }

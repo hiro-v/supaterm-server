@@ -19,6 +19,9 @@ Workbench snapshot:
 - `GET /api/workbench/{id}`
 - `PUT /api/workbench/{id}`
 
+Shell capabilities:
+- `GET /api/capabilities/shells`
+
 ## Canonical Session ID
 
 Session IDs are canonicalized at the HTTP boundary.
@@ -76,6 +79,10 @@ Attach path:
 Token transport:
 - query string today: `?token=...`
 
+Optional shell selection:
+- query string today: `?shell=fish|zsh|bash|sh`
+- omitted means `system` and defers to the host process `SHELL` or `/bin/sh`
+
 Current message split:
 - terminal payload: binary/text stream to and from the backend
 - control payload: JSON for small control messages such as resize
@@ -100,6 +107,24 @@ Current resize frame:
   "rows": 43
 }
 ```
+
+## Shell Capabilities Payload
+
+`GET /api/capabilities/shells` returns:
+
+```json
+{
+  "default_shell": "zsh",
+  "shells": [
+    { "id": "fish", "available": false, "path": null },
+    { "id": "zsh", "available": true, "path": "/bin/zsh" },
+    { "id": "bash", "available": true, "path": "/bin/bash" },
+    { "id": "sh", "available": true, "path": "/bin/sh" }
+  ]
+}
+```
+
+The web UI uses this to disable unavailable shells in the per-pane selector instead of guessing from the platform.
 
 ## Token Policies
 
@@ -138,7 +163,16 @@ The shared snapshot contains:
 - active tab
 - pane tree
 - active pane
+- per-pane shell choice
+- workbench appearance preferences
 - renamed titles
 - sidebar collapsed state
+
+Appearance preferences currently include:
+- font preset and font family
+- font size
+- cursor blink
+- terminal theme colors
+- workbench chrome palette
 
 Backend session continuity comes from the stable pane session IDs and the selected backend mode. For `zmx`, that is the intended fresh-browser restore path: fetch the shared workbench snapshot, rebuild the workspace/tab/pane layout, then reattach each pane to the same backend session id. When a pane session id already names a real local `zmx` session, the server now probes and attaches to that raw session first; otherwise it falls back to Supaterm's deterministic hashed `sess-...` alias.

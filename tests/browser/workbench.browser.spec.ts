@@ -4,6 +4,7 @@ import {
   openFreshWorkbench,
   readPaneInfo,
   runTerminalCommand,
+  terminalCanvasLocator,
 } from '../helpers/browser-workbench';
 
 test('workbench manages spaces tabs panes and lean chrome controls', async ({ page }) => {
@@ -35,7 +36,7 @@ test('workbench manages spaces tabs panes and lean chrome controls', async ({ pa
   await expect(page.locator('.footer-status')).toContainText('⌘T / ⌥⇧T New tab');
   await expect(page.locator('.footer-status')).toContainText('⌘B / ⌥⇧B Sidebar');
 
-  await page.click('.pane-terminal canvas');
+  await terminalCanvasLocator(page).click();
   await page.waitForTimeout(120);
 
   await page.getByRole('button', { name: 'New Tab' }).click();
@@ -65,8 +66,8 @@ test('workbench manages spaces tabs panes and lean chrome controls', async ({ pa
   await expect(activePane.locator('.pane-toolbar')).not.toContainText('ws.');
   await activePane.getByRole('button', { name: 'Pane details' }).click();
   await expect(page.locator('.info-panel')).toContainText('Session');
-  await expect(page.locator('.info-panel')).toContainText('supaterm.neutral-green');
-  await expect(page.locator('.info-panel')).toContainText('supaterm.theme.neutral-green');
+  await expect(page.locator('.info-panel')).toContainText('supaterm.blackout');
+  await expect(page.locator('.info-panel')).toContainText('supaterm.theme.blackout');
 });
 
 test('reload restores sidebar selection layout and names', async ({ page }) => {
@@ -187,7 +188,7 @@ test('pane click focuses terminal input and sends typed data', async ({ page }) 
   await openFreshWorkbench(page);
   await page.waitForTimeout(3000);
 
-  await page.click('.pane-terminal canvas');
+  await terminalCanvasLocator(page).click();
   await page.waitForTimeout(80);
   await page.keyboard.type('echo INPUT_SMOKE');
   await page.keyboard.press('Enter');
@@ -202,6 +203,68 @@ test('pane click focuses terminal input and sends typed data', async ({ page }) 
   expect(result.sent).toContain('e');
   expect(result.sent).toContain('I');
   expect(result.sent).toContain('\r');
+});
+
+test('pane details exposes shell choices and changing shell switches the pane session identity', async ({ page }) => {
+  await openFreshWorkbench(page);
+  await expect(page.locator(".pane-status[data-tone='connected']").first()).toContainText('Connected');
+
+  const activePane = page.locator(".pane-card[data-active='true']").first();
+  await activePane.getByRole('button', { name: 'Pane details' }).click();
+  const panel = page.locator('.info-panel');
+  await expect(panel).toBeVisible();
+  await expect(panel.locator('select[data-action="pane-shell"]')).toBeVisible();
+  await expect(panel.locator('select[data-action="pane-shell"] option')).toHaveCount(5);
+
+  await panel.locator('select[data-action="pane-shell"]').selectOption('sh');
+  await panel.getByRole('button', { name: 'Apply' }).click();
+  await expect(panel).toHaveCount(0);
+  await expect(page.locator(".pane-status[data-tone='connected']").first()).toContainText('Connected');
+
+  const infoText = await readPaneInfo(page);
+  expect(infoText).toContain('Shellsh');
+  expect(infoText).toContain('.shell.sh');
+});
+
+test('appearance changes persist through reload and shared workbench restore', async ({ browser, page }) => {
+  const sessionId = createBrowserSessionId('appearance');
+  await openFreshWorkbench(page, sessionId);
+
+  await page.getByRole('button', { name: 'Open appearance settings' }).click();
+  const panel = page.locator('.appearance-panel');
+  await expect(panel).toBeVisible();
+  await panel.locator('select[data-appearance-field="fontPreset"]').selectOption('jetbrains');
+  await panel.locator('input[data-appearance-field="fontSize"]').fill('17');
+  await panel.locator('input[data-appearance-field="theme.background"]').fill('#111111');
+  await panel.locator('input[data-appearance-field="theme.foreground"]').fill('#f5f5f5');
+  await panel.getByRole('button', { name: 'Apply' }).click();
+
+  await page.reload();
+  await expect(page.locator('.pane-status').first()).toContainText('Connected');
+  let infoText = await readPaneInfo(page);
+  expect(infoText).toContain('supaterm.theme.custom');
+
+  const styles = await page.evaluate(() => {
+    const root = document.querySelector('#app') as HTMLElement;
+    const css = getComputedStyle(root);
+    return {
+      bg: css.getPropertyValue('--chrome-shell-bg').trim(),
+      text: css.getPropertyValue('--text').trim(),
+    };
+  });
+  expect(styles.bg).toBe('#000000');
+  expect(styles.text).toBe('#f5f5f5');
+
+  const secondContext = await browser.newContext();
+  const secondPage = await secondContext.newPage();
+  try {
+    await openFreshWorkbench(secondPage, sessionId);
+    await expect(secondPage.locator('.pane-status').first()).toContainText('Connected');
+    infoText = await readPaneInfo(secondPage);
+    expect(infoText).toContain('supaterm.theme.custom');
+  } finally {
+    await secondContext.close();
+  }
 });
 
 test('webgpu path does not duplicate typed terminal input', async ({ page }) => {
@@ -224,7 +287,7 @@ test('webgpu path does not duplicate typed terminal input', async ({ page }) => 
   await openFreshWorkbench(page);
   await page.waitForFunction(() => document.querySelector('.pane-status')?.textContent?.includes('Connected'));
 
-  await page.click('.pane-terminal canvas');
+  await terminalCanvasLocator(page).click();
   await page.waitForTimeout(80);
   await page.keyboard.type('ab');
   await page.keyboard.press('Enter');

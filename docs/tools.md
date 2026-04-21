@@ -4,40 +4,68 @@
 
 Bootstrap:
 ```bash
+mise trust mise.toml
+mise install
+mise exec -- bun install
 git submodule update --init --recursive
-bun install
-bun run hooks:install
+mise exec -- bun run hooks:install
+```
+
+Unified defaults:
+```bash
+mise run setup
+mise run dev
+mise run check
+mise run release
+```
+
+Pinned toolchain:
+```bash
+mise exec -- zig version
+mise exec -- bun --version
 ```
 
 Server:
 ```bash
-zig build
-zig build run
-zig build check
+mise exec -- zig build
+mise exec -- zig build run
+mise exec -- zig build check
+mise exec -- zig build --release=small -Dembed-assets=true
 ```
 
 Local PTY shell startup:
 ```bash
-zig build run -- --shell-startup fast
-zig build run -- --shell-startup full
+mise exec -- zig build run -- --shell-startup fast
+mise exec -- zig build run -- --shell-startup full
 ```
+
+Shell capability probe:
+```bash
+curl http://127.0.0.1:3000/api/capabilities/shells
+```
+
+The web workbench uses that endpoint to populate the per-pane shell selector and disable missing shells on the current host.
 
 Web:
 ```bash
-bun run web:typecheck
-bun run web:lint
-bun run web:build
+mise exec -- bun run web:typecheck
+mise exec -- bun run web:lint
+mise exec -- bun run web:build
 ```
+
+The embedded release path stages a generated copy of `web/dist` under `src/.embedded-web/` through [scripts/gen-web-assets.ts](../scripts/gen-web-assets.ts). That script now resolves the repo root relative to its own file path instead of `process.cwd()`, so it works from arbitrary working directories. It also generates `src/.embedded-web/web_assets.generated.zig` from the actual built Bun/Vite output, which keeps the embedded asset list reproducible and avoids a checked-in hard-coded file manifest.
+The current terminal visual baseline is a blackout profile: black background, white foreground, `MesloLGS NF` at `15px`, with explicit Nerd Font symbol fallback for private-use icon glyphs.
+The workbench persists appearance preferences through the normal snapshot path, so browser tests now cover reload/shared restore for theme/font changes too.
 
 Tests:
 ```bash
-bun run test:unit
-bun run test:integration
-bun run test:contract
-bun run test:e2e
-bun run test:browser
-bun run perf:baseline
-bun run perf:current
+mise exec -- bun run test:unit
+mise exec -- bun run test:integration
+mise exec -- bun run test:contract
+mise exec -- bun run test:e2e
+mise exec -- bun run test:browser
+mise exec -- bun run perf:baseline
+mise exec -- bun run perf:current
 ```
 
 `test:browser` is self-contained. It boots a temporary local server, exports its base URL to Playwright, and shuts the server down after the browser run.
@@ -59,12 +87,12 @@ Component-focused coverage in `test:unit` now includes:
 
 Proof:
 ```bash
-bun run harness
+mise exec -- bun run harness
 ```
 
 Performance baseline:
-- collector: [scripts/perf-baseline.ts](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/scripts/perf-baseline.ts)
-- checked-in summary: [docs/performance-baseline.md](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/docs/performance-baseline.md)
+- collector: [scripts/perf-baseline.ts](../scripts/perf-baseline.ts)
+- checked-in summary: [docs/performance-baseline.md](performance-baseline.md)
 - current-run artifact: `.agent-harness/artifacts/perf-current.json`
 - budget report artifact: `.agent-harness/artifacts/perf-check.json`
 - CI base-branch baseline artifact: `.agent-harness/artifacts/perf-baseline.base.json`
@@ -78,18 +106,18 @@ Performance baseline:
 
 Local hooks:
 ```bash
-bun run hooks:install
-bun run hooks:pre-commit
+mise exec -- bun run hooks:install
+mise exec -- bun run hooks:pre-commit
 ```
 
-The checked-in hook entrypoint is [.git-hooks/pre-commit](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/.git-hooks/pre-commit), and the staging planner lives in [scripts/pre-commit.ts](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/scripts/pre-commit.ts).
+The checked-in hook entrypoint is [.git-hooks/pre-commit](../.git-hooks/pre-commit), and the staging planner lives in [scripts/pre-commit.ts](../scripts/pre-commit.ts).
 
 Zig lint:
 ```bash
-bun run zig:lint
+mise exec -- bun run zig:lint
 ```
 
-`bun run zig:lint` uses [scripts/zlint.sh](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/scripts/zlint.sh), which prefers:
+`bun run zig:lint` uses [scripts/zlint.sh](../scripts/zlint.sh), which prefers:
 - `ZLINT_BIN`
 - `zlint` on `PATH`
 - a local GHQ checkout of `github.com/DonIsaac/zlint`
@@ -98,17 +126,17 @@ bun run zig:lint
 
 `libghosty`:
 ```bash
-bun run libghosty:patch
-bun run libghosty:apply
-bun run libghosty:sync --ref <ref>
+mise exec -- bun run libghosty:patch
+mise exec -- bun run libghosty:apply
+mise exec -- bun run libghosty:sync --ref <ref>
 ```
 
 `zmx`:
 ```bash
-bun run zmx:patch
-bun run zmx:apply
-bun run zmx:sync --ref <ref>
-bun run zmx:smoke
+mise exec -- bun run zmx:patch
+mise exec -- bun run zmx:apply
+mise exec -- bun run zmx:sync --ref <ref>
+mise exec -- bun run zmx:smoke
 ```
 
 The repo-level `web:*`, `test:e2e`, and `zmx:smoke` scripts auto-apply the tracked vendor patches first so a clean checkout remains reproducible.
@@ -134,14 +162,14 @@ Use them to:
 
 Zig-only:
 1. edit
-2. `zig build check`
+2. `mise exec -- zig build check`
 3. run integration/contract tests if APIs changed
 
 Web-only:
 1. edit
-2. `bun run web:typecheck`
-3. `bun run test:browser`
-4. `bun run web:build`
+2. `mise exec -- bun run web:typecheck`
+3. `mise exec -- bun run test:browser`
+4. `mise exec -- bun run web:build`
 
 Dependency patch:
 1. edit the local wrapper or upstream submodule source
@@ -160,9 +188,11 @@ Hook and workflow config tests:
 ## CI and Release
 
 Primary workflows:
-- test matrix: [.github/workflows/test.yml](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/.github/workflows/test.yml)
-- tip channel updater: [.github/workflows/release-tip.yml](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/.github/workflows/release-tip.yml)
-- shared cache/bootstrap action: [.github/actions/setup-ci/action.yml](/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/.github/actions/setup-ci/action.yml)
+- test matrix: [.github/workflows/test.yml](../.github/workflows/test.yml)
+- tip channel updater: [.github/workflows/release-tip.yml](../.github/workflows/release-tip.yml)
+- nightly patch prerelease: [.github/workflows/release-nightly.yml](../.github/workflows/release-nightly.yml)
+- production release: [.github/workflows/release-prod.yml](../.github/workflows/release-prod.yml)
+- shared cache/bootstrap action: [.github/actions/setup-ci/action.yml](../.github/actions/setup-ci/action.yml)
 
 Current CI policy:
 - run Linux and macOS first
@@ -171,6 +201,17 @@ Current CI policy:
 - checkout submodules recursively so vendored `ghostty` and `zmx` source are present before any build/test step
 - publish a non-blocking Ubuntu perf base/current/check artifact set and step summary, resolving the PR base branch baseline when available before running `bun run perf:check`
 - keep the `tip` prerelease channel aligned with `main` by force-moving the `tip` tag and refreshing the GitHub prerelease assets
+- run a nightly `00:00` GMT/UTC patch bump workflow that updates the shared package version, pushes a `vX.Y.Z-nightly` tag, and publishes macOS/Linux prerelease binaries
+- run a manual production workflow that tags the current shared package version as `vX.Y.Z` and publishes a GitHub release with macOS/Linux binaries
+
+Shared version tooling:
+```bash
+bun run version:current
+bun run version:bump:patch
+bun run version:set -- 1.2.3
+```
+
+Those commands are backed by `scripts/release-version.ts`, which keeps the root `package.json` and `web/package.json` versions aligned.
 
 ## Git Discipline
 

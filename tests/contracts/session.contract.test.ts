@@ -26,6 +26,15 @@ type ShareGrant = {
   expires_at_unix_ms: number | null;
 };
 
+type ShellCapabilities = {
+  default_shell: string | null;
+  shells: Array<{
+    id: string;
+    available: boolean;
+    path: string | null;
+  }>;
+};
+
 describe('session API contract', () => {
   const sessionId = 'contract.session:v1';
   const shareSecret = 'contract-secret';
@@ -94,5 +103,19 @@ describe('session API contract', () => {
       share_authority: 'server',
       expires_at_unix_ms: null,
     });
+  });
+
+  test('shell capability endpoint returns the expected host shell contract', async () => {
+    const { status, payload } = await fetchJson<ShellCapabilities>(
+      `${server.baseUrl}/api/capabilities/shells`,
+    );
+
+    expect(status).toBe(200);
+    expect(Object.keys(payload).sort()).toEqual([
+      'default_shell',
+      'shells',
+    ]);
+    expect(payload.shells.map((entry) => entry.id)).toEqual(['fish', 'zsh', 'bash', 'sh']);
+    expect(payload.shells.every((entry) => typeof entry.available === 'boolean')).toBe(true);
   });
 });

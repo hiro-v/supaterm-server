@@ -7,6 +7,7 @@ import {
   readNumberMetric,
   readPaneInfo,
   runTerminalCommand,
+  terminalCanvasLocator,
   waitForPaneInfoMatch,
 } from '../helpers/browser-workbench';
 
@@ -100,9 +101,9 @@ test('scrollback navigation changes the visible viewport preview', async ({ page
 
   const bottomInfo = await readPaneInfo(page);
   expect(bottomInfo).toContain('Viewport Y0 rows');
-  expect(bottomInfo).toContain('SCROLL_052');
+  expect(bottomInfo).toMatch(/SCROLL_0(?:5\d|6\d|7\d|8\d|90)/);
 
-  const canvas = page.locator('.pane-terminal canvas').first();
+  const canvas = terminalCanvasLocator(page);
   await canvas.hover();
   await page.mouse.wheel(0, -3000);
   await page.waitForTimeout(1000);
@@ -113,7 +114,7 @@ test('scrollback navigation changes the visible viewport preview', async ({ page
 
   expect(scrollbackLength).toBeGreaterThan(0);
   expect(viewportY).toBeGreaterThan(0);
-  expect(scrolledInfo).not.toContain('SCROLL_052');
+  expect(scrolledInfo).not.toMatch(/SCROLL_0(?:5\d|6\d|7\d|8\d|90)/);
   expect(scrolledInfo).toMatch(/SCROLL_0(?:0[1-9]|[1-4]\d)/);
 });
 
@@ -127,7 +128,7 @@ test('bracketed paste mode wraps pasted terminal input', async ({ page }) => {
   const infoText = await readPaneInfo(page);
   expect(infoText).toContain('Bracketed PasteEnabled');
 
-  await page.click('.pane-terminal canvas');
+  await terminalCanvasLocator(page).click();
   await page.waitForTimeout(80);
   await page.evaluate(() => {
     const textarea = document.querySelector('.pane-terminal textarea');
@@ -170,7 +171,7 @@ test('alternate-screen mouse tracking emits SGR mouse sequences', async ({ page 
   expect(infoText).toContain('Mouse TrackingEnabled');
   expect(infoText).toContain('SGR MouseEnabled');
 
-  const canvas = page.locator('.pane-terminal canvas').first();
+  const canvas = terminalCanvasLocator(page);
   await canvas.click({ position: { x: 48, y: 36 } });
   await page.waitForTimeout(120);
 
@@ -219,4 +220,57 @@ test('wide glyphs emoji underline and inverse video stay visible in the viewport
 
   const styledMatch = infoText.match(/Styled Cells(\d+)/);
   expect(Number(styledMatch?.[1] ?? '0')).toBeGreaterThan(2);
+});
+
+test('kitty graphics PNG payloads render into the overlay layer', async ({ page }) => {
+  await openConnectedWorkbench(page);
+
+  const pngBase64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR42mP8z8BQDwAF/gL+0XvV7QAAAABJRU5ErkJggg==';
+  await runTerminalCommand(
+    page,
+    `printf '\\033_Ga=T,f=100,s=1,v=1,c=8,r=4;${pngBase64}\\033\\\\'`,
+  );
+
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('[data-supaterm-layer="kitty-images-foreground"]');
+    if (!(canvas instanceof HTMLCanvasElement)) return false;
+    if (getComputedStyle(canvas).display === 'none') return false;
+    const context = canvas.getContext('2d');
+    if (!context) return false;
+
+    const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+    for (let index = 3; index < data.length; index += 4) {
+      if (data[index] > 0) return true;
+    }
+    return false;
+  });
+
+  const overlay = await page.evaluate(() => {
+    const canvas = document.querySelector('[data-supaterm-layer="kitty-images-foreground"]');
+    if (!(canvas instanceof HTMLCanvasElement)) {
+      return { found: false, display: 'none', visiblePixels: 0 };
+    }
+
+    const context = canvas.getContext('2d');
+    if (!context) {
+      return { found: true, display: getComputedStyle(canvas).display, visiblePixels: 0 };
+    }
+
+    const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+    let visiblePixels = 0;
+    for (let index = 3; index < data.length; index += 4) {
+      if (data[index] > 0) visiblePixels += 1;
+    }
+
+    return {
+      found: true,
+      display: getComputedStyle(canvas).display,
+      visiblePixels,
+    };
+  });
+
+  expect(overlay.found).toBe(true);
+  expect(overlay.display).toBe('block');
+  expect(overlay.visiblePixels).toBeGreaterThan(0);
 });

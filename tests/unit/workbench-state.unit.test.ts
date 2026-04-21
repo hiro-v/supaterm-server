@@ -25,9 +25,29 @@ describe('workbench state', () => {
       workspaces: initial.workspaces,
       activeWorkspaceId: initial.activeWorkspaceId,
       sidebarCollapsed: true,
+      appearance: {
+        ...initial.appearance,
+        fontSize: 17,
+      },
     }, null);
 
     expect(state.sidebarCollapsed).toBe(true);
+    expect(state.appearance.fontSize).toBe(17);
+  });
+
+  test('normalizes legacy panes without an explicit shell to system', () => {
+    const initial = createInitialWorkbenchState(null);
+    const legacy = JSON.parse(JSON.stringify(initial)) as typeof initial & {
+      workspaces: Array<{
+        tabs: Array<{
+          root: { shell?: string };
+        }>;
+      }>;
+    };
+    delete legacy.workspaces[0]!.tabs[0]!.root.shell;
+
+    const state = normalizeWorkbenchState(legacy, null);
+    expect(getFirstLeaf(state.workspaces[0]!.tabs[0]!.root).shell).toBe('system');
   });
 
   test('replaces and removes pane nodes without leaking split structure', () => {

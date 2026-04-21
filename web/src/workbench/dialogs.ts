@@ -9,6 +9,8 @@ import {
   renamePane,
   renameTab,
   renameWorkspace,
+  setPaneShell,
+  setWorkbenchAppearance,
 } from './actions';
 import { buildWorkbenchCommands, filterWorkbenchCommands } from './commands';
 import type { DialogState } from './overlay';
@@ -52,7 +54,15 @@ export function submitWorkbenchDialog(
   }
 
   if (dialog.type === 'pane-info') {
-    return { kind: 'close' };
+    return setPaneShell(state, dialog.paneId, dialog.shell)
+      ? { kind: 'commit', disposedPaneIds: [] }
+      : { kind: 'noop' };
+  }
+
+  if (dialog.type === 'appearance') {
+    return setWorkbenchAppearance(state, dialog.appearance)
+      ? { kind: 'commit', disposedPaneIds: [] }
+      : { kind: 'noop' };
   }
 
   if (dialog.type === 'confirm-close') {

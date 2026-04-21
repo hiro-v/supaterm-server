@@ -7,6 +7,7 @@ import type {
 export type WorkbenchHandlerCallbacks = {
   addTab(): void;
   toggleSidebar(): void;
+  openAppearanceDialog(): void;
   openRenameTabDialog(): void;
   openRenamePaneDialog(): void;
   openCloseTabDialog(): void;
@@ -35,6 +36,7 @@ export function createWorkbenchCommandHandlers(
   return {
     addTab: callbacks.addTab,
     toggleSidebar: callbacks.toggleSidebar,
+    openAppearanceDialog: callbacks.openAppearanceDialog,
     openRenameTabDialog: callbacks.openRenameTabDialog,
     openRenamePaneDialog: callbacks.openRenamePaneDialog,
     openCloseTabDialog: callbacks.openCloseTabDialog,
@@ -56,6 +58,7 @@ export function createWorkbenchActionHandlers(
   return {
     openCreateSpaceDialog: callbacks.openCreateSpaceDialog,
     addTab: callbacks.addTab,
+    openAppearanceDialog: callbacks.openAppearanceDialog,
     openRenameWorkspaceDialog: callbacks.openRenameWorkspaceDialog,
     openCloseWorkspaceDialog: callbacks.openCloseWorkspaceDialog,
     toggleSidebar: callbacks.toggleSidebar,

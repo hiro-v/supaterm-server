@@ -5,6 +5,57 @@ import type {
   WorkbenchChromePalette,
 } from './contracts';
 
+export type FontPresetId = 'meslo' | 'jetbrains' | 'iosevka' | 'sfmono' | 'system' | 'custom';
+
+export const FONT_PRESET_FAMILIES: Record<Exclude<FontPresetId, 'custom'>, string> = {
+  meslo:
+    '"MesloLGS NF", "MesloLGS Nerd Font Mono", "Symbols Nerd Font Mono", monospace',
+  jetbrains:
+    '"JetBrains Mono", "JetBrainsMono Nerd Font", "Symbols Nerd Font Mono", monospace',
+  iosevka:
+    '"Iosevka Term", "Symbols Nerd Font Mono", monospace',
+  sfmono:
+    '"SF Mono", ui-monospace, monospace',
+  system:
+    'ui-monospace, monospace',
+};
+
+export function resolveFontPresetFamily(preset: Exclude<FontPresetId, 'custom'>): string {
+  return FONT_PRESET_FAMILIES[preset];
+}
+
+export const DEFAULT_TERMINAL_THEME: TerminalThemePalette = {
+  background: '#000000',
+  foreground: '#ffffff',
+  cursor: '#ffffff',
+  cursorAccent: '#000000',
+  selectionBackground: '#303030',
+  selectionForeground: '#ffffff',
+  black: '#000000',
+  red: '#ff5f5f',
+  green: '#5fff87',
+  yellow: '#ffd75f',
+  blue: '#5fafff',
+  magenta: '#d787ff',
+  cyan: '#5fffff',
+  white: '#ffffff',
+  brightBlack: '#666666',
+  brightRed: '#ff8787',
+  brightGreen: '#87ffaf',
+  brightYellow: '#ffe58a',
+  brightBlue: '#87c7ff',
+  brightMagenta: '#ebb9ff',
+  brightCyan: '#87ffff',
+  brightWhite: '#ffffff',
+};
+
+export const DEFAULT_CHROME_PALETTE: WorkbenchChromePalette = {
+  shellBackground: '#000000',
+  shellBackgroundAlt: '#050505',
+  glow: '#424242',
+  grid: '#111111',
+};
+
 export type VisualConfig = {
   id: string;
   themeId: string;
@@ -23,41 +74,13 @@ export function createDefaultVisualConfigSource(): VisualConfigSource {
   return {
     load() {
       return {
-        id: 'supaterm.neutral-green',
-        themeId: 'supaterm.theme.neutral-green',
-        fontFamily: 'JetBrains Mono, monospace',
-        fontSize: 14,
+        id: 'supaterm.blackout',
+        themeId: 'supaterm.theme.blackout',
+        fontFamily: FONT_PRESET_FAMILIES.meslo,
+        fontSize: 15,
         cursorBlink: true,
-        theme: {
-          background: '#101319',
-          foreground: '#ece7dc',
-          cursor: '#ece7dc',
-          cursorAccent: '#101319',
-          selectionBackground: '#cfe48a',
-          selectionForeground: '#101319',
-          black: '#101319',
-          red: '#d28978',
-          green: '#c4e177',
-          yellow: '#d9e98e',
-          blue: '#86acd4',
-          magenta: '#bc97d1',
-          cyan: '#87c8c8',
-          white: '#dfe7cf',
-          brightBlack: '#6c7480',
-          brightRed: '#e4a08f',
-          brightGreen: '#d8f09a',
-          brightYellow: '#ebf8b1',
-          brightBlue: '#a5c6e7',
-          brightMagenta: '#d3b3e5',
-          brightCyan: '#9ddede',
-          brightWhite: '#fff8ee',
-        },
-        chromePalette: {
-          shellBackground: '#090909',
-          shellBackgroundAlt: '#121215',
-          glow: '#7db3ff',
-          grid: '#1a212a',
-        },
+        theme: DEFAULT_TERMINAL_THEME,
+        chromePalette: DEFAULT_CHROME_PALETTE,
       };
     },
   };

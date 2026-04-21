@@ -36,8 +36,8 @@ describe('workbench pane tree', () => {
             latencyMs: null,
             sessionId: session.sessionId,
             runtimeProfileId: 'runtime',
-            visualProfileId: 'supaterm.neutral-green',
-            themeId: 'supaterm.theme.neutral-green',
+            visualProfileId: 'supaterm.blackout',
+            themeId: 'supaterm.theme.blackout',
             activeRenderer: 'libghosty-canvas',
             requestedRenderer: 'webgpu',
             rendererFallbackReason: null,
@@ -84,6 +84,7 @@ describe('workbench pane tree', () => {
     const resolveSessionConnection = (_workspace: typeof workspace, _tab: typeof tab, pane: PaneLeaf) => ({
       sessionId: `session:${pane.id}`,
       token: null,
+      shell: pane.shell,
     });
 
     const secondPane = createPane('Pane 2');

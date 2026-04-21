@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { ensureDom } from '../helpers/dom';
 import { getFilteredDialogCommands, renderWorkbenchOverlay, type DialogState } from '../../web/src/workbench/overlay';
-import { createPane, createTab, createWorkspace, type WorkbenchState } from '../../web/src/workbench/state';
+import { createInitialWorkbenchState, createPane, createTab, createWorkspace, type WorkbenchState } from '../../web/src/workbench/state';
 
 describe('workbench overlay rendering', () => {
   test('filters palette commands and renders the command palette panel', () => {
@@ -16,6 +16,7 @@ describe('workbench overlay rendering', () => {
       workspaces: [workspace],
       activeWorkspaceId: workspace.id,
       sidebarCollapsed: false,
+      appearance: createInitialWorkbenchState(null).appearance,
     };
     const dialog: DialogState = {
       type: 'palette',
@@ -35,6 +36,7 @@ describe('workbench overlay rendering', () => {
       activePane: pane,
       paneViews: new Map(),
       findPaneById: () => pane,
+      shellCapabilities: null,
     });
 
     expect(overlayRoot.querySelector('.palette-panel')).toBeTruthy();
@@ -52,6 +54,7 @@ describe('workbench overlay rendering', () => {
     const dialog: DialogState = {
       type: 'pane-info',
       paneId: pane.id,
+      shell: 'system',
     };
 
     renderWorkbenchOverlay({
@@ -61,6 +64,7 @@ describe('workbench overlay rendering', () => {
         workspaces: [workspace],
         activeWorkspaceId: workspace.id,
         sidebarCollapsed: false,
+        appearance: createInitialWorkbenchState(null).appearance,
       },
       activeWorkspace: workspace,
       activeTab: tab,
@@ -71,6 +75,11 @@ describe('workbench overlay rendering', () => {
           title: document.createElement('span'),
           metrics: document.createElement('span'),
           status: document.createElement('span'),
+          session: {
+            sessionId: 'session:inspect',
+            token: null,
+            shell: 'system',
+          },
           client: {
             async start() {},
             activate() {},
@@ -81,8 +90,8 @@ describe('workbench overlay rendering', () => {
                 latencyMs: 12,
                 sessionId: 'session:inspect',
                 runtimeProfileId: 'runtime.ready',
-                visualProfileId: 'supaterm.neutral-green',
-                themeId: 'supaterm.theme.neutral-green',
+                visualProfileId: 'supaterm.blackout',
+                themeId: 'supaterm.theme.blackout',
                 activeRenderer: 'libghosty-canvas',
                 requestedRenderer: 'webgpu',
                 rendererFallbackReason: 'fallback',
@@ -127,12 +136,22 @@ describe('workbench overlay rendering', () => {
         }],
       ]),
       findPaneById: () => pane,
+      shellCapabilities: {
+        default_shell: 'zsh',
+        shells: [
+          { id: 'fish', available: false, path: null },
+          { id: 'zsh', available: true, path: '/bin/zsh' },
+          { id: 'bash', available: true, path: '/bin/bash' },
+          { id: 'sh', available: true, path: '/bin/sh' },
+        ],
+      },
     });
 
     expect(overlayRoot.querySelector('.info-panel')).toBeTruthy();
+    expect(overlayRoot.textContent).toContain('System Default (zsh)');
     expect(overlayRoot.textContent).toContain('runtime.ready');
-    expect(overlayRoot.textContent).toContain('supaterm.neutral-green');
-    expect(overlayRoot.textContent).toContain('supaterm.theme.neutral-green');
+    expect(overlayRoot.textContent).toContain('supaterm.blackout');
+    expect(overlayRoot.textContent).toContain('supaterm.theme.blackout');
     expect(overlayRoot.textContent).toContain('alternate');
     expect(overlayRoot.textContent).toContain('Canvas Fallback');
     expect(overlayRoot.textContent).toContain('WebGPU renderer metrics unavailable on canvas fallback.');

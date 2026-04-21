@@ -38,6 +38,18 @@ describe('local backend integration', () => {
     expect(share.status).toBe(200);
   });
 
+  test('reports supported interactive shells from the host capability surface', async () => {
+    const response = await fetch(`${server.baseUrl}/api/capabilities/shells`);
+    expect(response.status).toBe(200);
+    const payload = await response.json() as {
+      default_shell: string | null;
+      shells: Array<{ id: string; available: boolean; path: string | null }>;
+    };
+
+    expect(payload.shells.map((entry) => entry.id)).toEqual(['fish', 'zsh', 'bash', 'sh']);
+    expect(payload.shells.some((entry) => entry.id === 'sh' && entry.available)).toBe(true);
+  });
+
   test('rejects invalid session ids at the metadata boundary', async () => {
     const response = await fetch(`${server.baseUrl}/api/sessions/bad%2Fid`);
     expect(response.status).toBe(400);
@@ -85,6 +97,19 @@ describe('local backend integration', () => {
     expect(transcript).toContain('TERM_PROGRAM_VERSION=0.1.0');
     expect(transcript).toContain('CLICOLOR=1');
   }, 8_000);
+
+  test('accepts an explicit shell selection when opening a pane session', async () => {
+    const explicitSessionId = `${sessionId}.shell.sh`;
+    const transcript = await openTerminalSession({
+      port: server.port,
+      sessionId: explicitSessionId,
+      token: computeSessionShareToken(explicitSessionId, shareSecret),
+      shell: 'sh',
+      command: "printf '__SHELL_EXPLICIT_OK__\\n'",
+    });
+
+    expect(transcript).toContain('__SHELL_EXPLICIT_OK__');
+  });
 
   test('uses fast shell startup by default but can opt into full shell init', async () => {
     const homeDir = mkdtempSync(path.join(os.tmpdir(), 'supaterm-shell-startup-'));

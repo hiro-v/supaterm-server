@@ -11,6 +11,7 @@ playwright-report/
 node_modules/
 web/node_modules/
 web/dist/
+src/.embedded-web/
 third_party/libghostty/node_modules/
 third_party/libghostty/dist/
 *.rej
