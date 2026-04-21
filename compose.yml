@@ -1,0 +1,18 @@
+services:
+  linux-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - supaterm-mise:/root/.local/share/mise
+      - supaterm-cache:/root/.cache
+    environment:
+      CI: "1"
+    tty: true
+    stdin_open: true
+
+volumes:
+  supaterm-mise:
+  supaterm-cache:

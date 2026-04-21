@@ -1,0 +1,92 @@
+name: setup-ci
+description: Install Bun and Zig, restore caches, install dependencies, and optionally install Playwright.
+
+inputs:
+  bun-version:
+    required: false
+    default: "1.3.11"
+  zig-version:
+    required: false
+    default: "0.15.2"
+  cache-key-suffix:
+    required: true
+  install-playwright:
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: ${{ inputs.bun-version }}
+
+    - uses: mlugg/setup-zig@v2.2.1
+      with:
+        version: ${{ inputs.zig-version }}
+
+    - uses: actions/cache@v5
+      with:
+        path: |
+          ~/.bun/install/cache
+          ~/.cache/zig
+          .zig-cache
+          zig-out
+          .tooling/zlint/zig-out
+          .tooling/zlint/.zig-cache
+          third_party/zmx/.zig-cache
+          third_party/zmx/zig-out
+          node_modules
+          web/node_modules
+          third_party/libghostty/node_modules
+        key: ${{ runner.os }}-bun-zig-${{ inputs.cache-key-suffix }}
+        restore-keys: |
+          ${{ runner.os }}-bun-zig-
+
+    - uses: actions/cache@v5
+      if: ${{ inputs.install-playwright == 'true' }}
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ runner.os }}-playwright-${{ inputs.cache-key-suffix }}
+        restore-keys: |
+          ${{ runner.os }}-playwright-
+
+    - name: Install root dependencies
+      shell: bash
+      run: bun install --frozen-lockfile
+
+    - name: Install web package dependencies
+      shell: bash
+      run: |
+        cd web
+        bun install --frozen-lockfile
+
+    - name: Install libghostty wrapper dependencies
+      shell: bash
+      run: |
+        cd third_party/libghostty
+        bun install --frozen-lockfile || bun install
+
+    - name: Install zlint
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ ! -x ".tooling/zlint/zig-out/bin/zlint" ]; then
+          rm -rf .tooling/zlint
+          git clone --depth=1 https://github.com/DonIsaac/zlint.git .tooling/zlint
+          (
+            cd .tooling/zlint
+            zig build --release=safe
+          )
+        fi
+        echo "ZLINT_BIN=${GITHUB_WORKSPACE}/.tooling/zlint/zig-out/bin/zlint" >> "$GITHUB_ENV"
+
+    - name: Install Playwright Chromium
+      if: ${{ inputs.install-playwright == 'true' }}
+      shell: bash
+      run: |
+        if [ "${RUNNER_OS}" = "Linux" ]; then
+          bunx playwright install --with-deps chromium
+        else
+          bunx playwright install chromium
+        fi

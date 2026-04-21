@@ -1,0 +1,223 @@
+{
+  "version": 1,
+  "metadata": {
+    "purpose": "Supaterm-server phase-driven deterministic execution",
+    "target_platform": "linux",
+    "required_stack": "bun, node, zig (phase-1 and later), tsgo/tsc"
+  },
+  "checks": [
+    {
+      "name": "Repository is writable by harness",
+      "command": "test -w .",
+      "phase": "phase-0",
+      "description": "Foundation check used by all automated runs."
+    },
+    {
+      "name": "Git checkout is present",
+      "command": "git rev-parse --is-inside-work-tree",
+      "phase": "phase-0"
+    },
+    {
+      "name": "Required toolchain presence (bun, rg, git)",
+      "command": "bun --version && rg --version && git --version",
+      "phase": "phase-0",
+      "maxDurationMs": 10000,
+      "expect": {
+        "contains": [
+          "ripgrep",
+          "git version"
+        ]
+      },
+      "description": "Hard requirement before starting any code changes."
+    },
+    {
+      "name": "Core workspace files exist",
+      "phase": "phase-0",
+      "command": "test -f README.md && test -f package.json && test -f build.zig && test -f .agent-harness/run.ts",
+      "required": true
+    },
+    {
+      "name": "Submodules are declared and present",
+      "phase": "phase-0",
+      "command": "test -f .gitmodules && rg -q 'third_party/libghostty/ghostty' .gitmodules && rg -q 'third_party/zmx' .gitmodules && test -d third_party/libghostty && test -d third_party/libghostty/ghostty && test -d third_party/zmx",
+      "required": true,
+      "description": "Fail quickly if required third-party repositories are not checked out before build steps."
+    },
+    {
+      "name": "No pending git changes",
+      "command": "git diff --quiet --exit-code",
+      "phase": "phase-0",
+      "required": false,
+      "description": "Informational while iterating."
+    },
+    {
+      "name": "Zig available",
+      "command": "zig version",
+      "phase": "phase-1",
+      "required": false,
+      "description": "Required starting from Phase 1, tracked as warning until installed."
+    },
+    {
+      "name": "Build entrypoint file is well-formed",
+      "command": "test -f src/main.zig && test -f src/session_manager.zig && test -f src/session_backends.zig && test -f src/ws_frames.zig",
+      "phase": "phase-1"
+    },
+    {
+      "name": "Web frontend type-checks",
+      "command": "bun run web:typecheck",
+      "phase": "phase-1",
+      "required": true,
+      "timeoutMs": 120000
+    },
+    {
+      "name": "Frontend uses libghosty vendored source",
+      "command": "rg -q \"from 'libghosty'|from \\\"libghosty\\\"\" web/src",
+      "phase": "phase-1",
+      "required": true
+    },
+    {
+      "name": "Libghosty patch workflow scripts exist",
+      "command": "test -f scripts/libghosty-patch.sh",
+      "phase": "phase-1",
+      "required": false,
+      "description": "Ensure deterministic submodule patch workflow can be run when needed."
+    },
+    {
+      "name": "Libghosty patch artifacts exist",
+      "command": "test -f patches/libghosty/state.json && test -f patches/libghosty/libghosty.patch",
+      "phase": "phase-1",
+      "required": false,
+      "description": "Track overlay patch metadata and baseline for deterministic updates."
+    },
+    {
+      "name": "Web package lint is clean",
+      "command": "bun run web:lint",
+      "phase": "phase-1",
+      "required": false,
+      "timeoutMs": 120000,
+      "description": "Warning-level hygiene checks while source is still stabilizing."
+    },
+    {
+      "name": "Unit test layer passes",
+      "command": "bun run test:unit",
+      "phase": "phase-1",
+      "required": false,
+      "timeoutMs": 120000,
+      "description": "Fast helper coverage for Zig and TypeScript."
+    },
+    {
+      "name": "Web bundling for distribution",
+      "command": "bun run web:build",
+      "phase": "phase-1",
+      "required": true,
+      "timeoutMs": 120000,
+      "maxDurationMs": 120000
+    },
+    {
+      "name": "Web static assets are generated",
+      "command": "test -f web/dist/index.html && test -d web/dist/assets",
+      "phase": "phase-1",
+      "required": true
+    },
+    {
+      "name": "Run project-level typecheck pipeline",
+      "command": "bun run typecheck",
+      "phase": "phase-1",
+      "required": false,
+      "timeoutMs": 120000
+    },
+    {
+      "name": "WebSocket endpoint contract check",
+      "command": "rg -q --line-number \"extractSessionId|binary|parseResizeFrame|resize\" src/main.zig",
+      "phase": "phase-2",
+      "required": true
+    },
+    {
+      "name": "Backend adapter abstraction exists",
+      "command": "test -f src/session_manager.zig && rg -q \"BackendHandle|SessionHandle|SessionManager\" src/session_backends.zig src/session_manager.zig",
+      "phase": "phase-2",
+      "required": true
+    },
+    {
+      "name": "Frontend/Server contract smoke entrypoint",
+      "command": "test -f web/src/main.ts && test -f web/src/session.ts && test -f web/src/terminal-client.ts && rg -q \"api/sessions/.*/ws|buildSessionWebSocketUrl|decodeTerminalMessage\" web/src && rg -q \"fit.fit|onResize|onData\" web/src/terminal-client.ts",
+      "phase": "phase-2",
+      "required": true
+    },
+    {
+      "name": "Integration test layer passes",
+      "command": "bun run test:integration",
+      "phase": "phase-2",
+      "required": false,
+      "timeoutMs": 120000,
+      "description": "Live server behavior with the local backend."
+    },
+    {
+      "name": "Data contract test layer passes",
+      "command": "bun run test:contract",
+      "phase": "phase-2",
+      "required": false,
+      "timeoutMs": 120000,
+      "description": "Exact JSON contract assertions for session metadata and share grants."
+    },
+    {
+      "name": "zmx protocol reference files discovered",
+      "command": "if [ -d third_party/zmx/src ] && [ -f third_party/zmx/src/ipc.zig ] && [ -f third_party/zmx/src/socket.zig ]; then exit 0; elif [ -d ../../neurosnap/zmx/src ] && [ -f ../../neurosnap/zmx/src/ipc.zig ] && [ -f ../../neurosnap/zmx/src/socket.zig ]; then exit 0; elif [ -d ../neurosnap/zmx/src ] && [ -f ../neurosnap/zmx/src/ipc.zig ] && [ -f ../neurosnap/zmx/src/socket.zig ]; then exit 0; else exit 1; fi",
+      "phase": "phase-3",
+      "required": false,
+      "description": "Phase 3 is integration-ready once client/daiemon glue is implemented."
+    },
+    {
+      "name": "zmx patch workflow scripts exist",
+      "command": "test -f scripts/zmx-patch.sh",
+      "phase": "phase-3",
+      "required": false,
+      "description": "Ensure deterministic zmx submodule patch workflow can be run when needed."
+    },
+    {
+      "name": "zmx patch artifacts exist",
+      "command": "test -f patches/zmx/state.json && test -f patches/zmx/zmx.patch",
+      "phase": "phase-3",
+      "required": false,
+      "description": "Track zmx overlay patch metadata and baseline for deterministic updates."
+    },
+    {
+      "name": "zmx backend smoke test",
+      "command": "bun run zmx:smoke",
+      "phase": "phase-3",
+      "required": true,
+      "timeoutMs": 120000,
+      "description": "Build vendored zmx, boot server in zmx mode, and verify a live WebSocket terminal round-trip."
+    },
+    {
+      "name": "End-to-end test layer passes",
+      "command": "bun run test:e2e",
+      "phase": "phase-3",
+      "required": false,
+      "timeoutMs": 120000,
+      "description": "zmx-backed end-to-end test coverage via the shared test harness."
+    },
+    {
+      "name": "Single-binary artifact pipeline check",
+      "command": "test -f src/web_assets.zig && test -f build.zig",
+      "phase": "phase-4",
+      "required": false,
+      "description": "Foundation check for embed bundle readiness."
+    },
+    {
+      "name": "Swift integration abstraction entrypoint",
+      "command": "rg -q \"BackendFactory|Authorizer|ShareIssuer|setBackendFactory|setAuthorizer|setShareIssuer\" src/session_manager.zig && test -f docs/swift-host-integration.md",
+      "phase": "phase-5",
+      "required": false,
+      "description": "Swift host can inject a custom backend provider, authorization policy, and share grant issuer."
+    },
+    {
+      "name": "Tree-sitter AST tooling is present",
+      "command": "test -f scripts/tree-sitter.sh && test -f tools/tree-sitter/queries/zig/functions.scm && test -f tools/tree-sitter/queries/typescript/functions.scm && bun run ast:scan >/dev/null",
+      "phase": "phase-5",
+      "required": false,
+      "timeoutMs": 120000,
+      "description": "Maintainability tooling should be able to inspect Zig and TypeScript ASTs deterministically."
+    }
+  ]
+}

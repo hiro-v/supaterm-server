@@ -1,0 +1,129 @@
+name: release-prod
+
+on:
+  workflow_dispatch: {}
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    name: tag production release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: main
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-ci
+        with:
+          cache-key-suffix: prod-${{ hashFiles('bun.lock', 'package.json', 'web/package.json', '.gitmodules', 'zlint.json', 'patches/libghosty/libghosty.patch', 'patches/zmx/zmx.patch') }}
+
+      - name: Create production tag
+        id: tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(bun run --silent version:current)"
+          TAG="v${VERSION}"
+          if git rev-parse "${TAG}" >/dev/null 2>&1; then
+            echo "Tag ${TAG} already exists" >&2
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${TAG}" -m "Release ${TAG}"
+          git push origin "${TAG}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: production build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    needs:
+      - prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: macos-latest
+            platform: macos
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          submodules: recursive
+
+      - name: Compute cache key inputs
+        id: cache_key
+        shell: bash
+        run: |
+          echo "libghostty=$(git rev-parse HEAD:third_party/libghostty/ghostty)" >> "$GITHUB_OUTPUT"
+          echo "zmx=$(git rev-parse HEAD:third_party/zmx)" >> "$GITHUB_OUTPUT"
+
+      - uses: ./.github/actions/setup-ci
+        with:
+          cache-key-suffix: ${{ hashFiles('bun.lock', 'package.json', 'web/package.json', '.gitmodules', 'zlint.json', 'patches/libghosty/libghosty.patch', 'patches/zmx/zmx.patch') }}-${{ steps.cache_key.outputs.libghostty }}-${{ steps.cache_key.outputs.zmx }}
+
+      - name: Build embedded release binary
+        shell: bash
+        run: |
+          zig build --release=small -Dembed-assets=true
+
+      - name: Package release artifacts
+        shell: bash
+        run: |
+          sh ./scripts/package-release.sh "${{ needs.prepare.outputs.version }}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: prod-${{ matrix.platform }}
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+
+  release:
+    name: publish production release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    needs:
+      - prepare
+      - build
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish production release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "${{ needs.prepare.outputs.tag }}" \
+            --title "Supaterm v${{ needs.prepare.outputs.version }}" \
+            --notes "Production release v${{ needs.prepare.outputs.version }}." \
+            dist/* \
+            -R "${GITHUB_REPOSITORY}" 2>/dev/null || \
+          gh release edit "${{ needs.prepare.outputs.tag }}" \
+            --title "Supaterm v${{ needs.prepare.outputs.version }}" \
+            --notes "Production release v${{ needs.prepare.outputs.version }}." \
+            -R "${GITHUB_REPOSITORY}"
+          gh release upload "${{ needs.prepare.outputs.tag }}" dist/* --clobber -R "${GITHUB_REPOSITORY}"

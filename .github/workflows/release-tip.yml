@@ -1,0 +1,118 @@
+name: release-tip
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**/*.md"
+  workflow_dispatch: {}
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: macos-latest
+            platform: macos
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Compute cache key inputs
+        id: cache_key
+        shell: bash
+        run: |
+          echo "libghostty=$(git rev-parse HEAD:third_party/libghostty/ghostty)" >> "$GITHUB_OUTPUT"
+          echo "zmx=$(git rev-parse HEAD:third_party/zmx)" >> "$GITHUB_OUTPUT"
+
+      - uses: ./.github/actions/setup-ci
+        with:
+          cache-key-suffix: ${{ hashFiles('bun.lock', 'package.json', '.gitmodules', 'zlint.json', 'patches/libghosty/libghosty.patch', 'patches/zmx/zmx.patch') }}-${{ steps.cache_key.outputs.libghostty }}-${{ steps.cache_key.outputs.zmx }}
+
+      - name: Build release binary with embedded web assets
+        shell: bash
+        run: zig build -Dembed-assets=true -Doptimize=ReleaseSafe
+
+      - name: Package artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          ARCH="$(uname -m)"
+          case "${RUNNER_OS}" in
+            Linux) PLATFORM="linux" ;;
+            macOS) PLATFORM="macos" ;;
+            *) echo "Unsupported runner OS: ${RUNNER_OS}" >&2; exit 1 ;;
+          esac
+          NAME="supaterm-server-${PLATFORM}-${ARCH}"
+          cp zig-out/bin/supaterm-server "dist/${NAME}"
+          tar -C dist -czf "dist/${NAME}.tar.gz" "${NAME}"
+          shasum -a 256 "dist/${NAME}.tar.gz" > "dist/${NAME}.tar.gz.sha256"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: tip-${{ matrix.platform }}
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+
+  release:
+    name: update tip channel
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    needs:
+      - build
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Force-move tip tag
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -fa tip -m "Latest tip build" "${GITHUB_SHA}"
+          git push --force origin tip
+
+      - name: Update tip release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create tip \
+            --prerelease \
+            --title "Supaterm Tip" \
+            --target "${GITHUB_SHA}" \
+            --notes "Continuous tip release from main." \
+            -R "${GITHUB_REPOSITORY}" 2>/dev/null || \
+          gh release edit tip \
+            --prerelease \
+            --title "Supaterm Tip" \
+            --target "${GITHUB_SHA}" \
+            --notes "Continuous tip release from main." \
+            -R "${GITHUB_REPOSITORY}"
+          gh release upload tip dist/* --clobber -R "${GITHUB_REPOSITORY}"

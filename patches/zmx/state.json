@@ -1,0 +1,6 @@
+{
+  "upstreamRef": "HEAD",
+  "upstreamCommit": "81243b97b548e09bd27105fe9e53c5d1e6b8ccbe",
+  "updatedAt": "2026-04-21T09:21:39Z",
+  "patchFile": "patches/zmx/zmx.patch"
+}

@@ -1,0 +1,463 @@
+diff --git a/.gitignore b/.gitignore
+index e451b171a..89c623d8b 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -23,3 +23,4 @@ glad.zip
+ /ghostty.qcow2
+ 
+ vgcore.*
++node_modules/
+diff --git a/include/ghostty/vt.h b/include/ghostty/vt.h
+index 4f8fef88e..ca9fb1d4d 100644
+--- a/include/ghostty/vt.h
++++ b/include/ghostty/vt.h
+@@ -28,6 +28,7 @@
+  * @section groups_sec API Reference
+  *
+  * The API is organized into the following groups:
++ * - @ref terminal "Terminal Emulator" - Complete terminal emulator with VT parsing
+  * - @ref key "Key Encoding" - Encode key events into terminal sequences
+  * - @ref osc "OSC Parser" - Parse OSC (Operating System Command) sequences
+  * - @ref sgr "SGR Parser" - Parse SGR (Select Graphic Rendition) sequences
+@@ -74,6 +75,7 @@ extern "C" {
+ 
+ #include <ghostty/vt/result.h>
+ #include <ghostty/vt/allocator.h>
++#include <ghostty/vt/terminal.h>
+ #include <ghostty/vt/osc.h>
+ #include <ghostty/vt/sgr.h>
+ #include <ghostty/vt/key.h>
+diff --git a/src/build/Config.zig b/src/build/Config.zig
+index e88213d71..3cccaf3e2 100644
+--- a/src/build/Config.zig
++++ b/src/build/Config.zig
+@@ -505,7 +505,9 @@ pub fn terminalOptions(self: *const Config) TerminalBuildOptions {
+         .artifact = .ghostty,
+         .simd = self.simd,
+         .oniguruma = true,
++        .kitty_graphics = true,
+         .c_abi = false,
++        .tmux_control_mode = true,
+         .slow_runtime_safety = switch (self.optimize) {
+             .Debug => true,
+             .ReleaseSafe,
+diff --git a/src/build/GhosttyZig.zig b/src/build/GhosttyZig.zig
+index a8d2726bc..42f85f321 100644
+--- a/src/build/GhosttyZig.zig
++++ b/src/build/GhosttyZig.zig
+@@ -23,6 +23,8 @@ pub fn init(
+     // We should expose this as a build option in the future so we can
+     // conditionally do this.
+     vt_options.oniguruma = false;
++    vt_options.kitty_graphics = true;
++    vt_options.tmux_control_mode = false;
+ 
+     return .{
+         .vt = try initVt(
+diff --git a/src/lib_vt.zig b/src/lib_vt.zig
+index 03a883e20..99434eb15 100644
+--- a/src/lib_vt.zig
++++ b/src/lib_vt.zig
+@@ -140,6 +140,55 @@ comptime {
+         @export(&c.sgr_unknown_partial, .{ .name = "ghostty_sgr_unknown_partial" });
+         @export(&c.sgr_attribute_tag, .{ .name = "ghostty_sgr_attribute_tag" });
+         @export(&c.sgr_attribute_value, .{ .name = "ghostty_sgr_attribute_value" });
++        // Terminal lifecycle
++        @export(&c.terminal_new, .{ .name = "ghostty_terminal_new" });
++        @export(&c.terminal_new_with_config, .{ .name = "ghostty_terminal_new_with_config" });
++        @export(&c.terminal_free, .{ .name = "ghostty_terminal_free" });
++        @export(&c.terminal_resize, .{ .name = "ghostty_terminal_resize" });
++        @export(&c.terminal_write, .{ .name = "ghostty_terminal_write" });
++        @export(&c.terminal_set_pixel_size, .{ .name = "ghostty_terminal_set_pixel_size" });
++
++        // RenderState API - high-performance rendering
++        @export(&c.render_state_update, .{ .name = "ghostty_render_state_update" });
++        @export(&c.render_state_get_cols, .{ .name = "ghostty_render_state_get_cols" });
++        @export(&c.render_state_get_rows, .{ .name = "ghostty_render_state_get_rows" });
++        @export(&c.render_state_get_cursor_x, .{ .name = "ghostty_render_state_get_cursor_x" });
++        @export(&c.render_state_get_cursor_y, .{ .name = "ghostty_render_state_get_cursor_y" });
++        @export(&c.render_state_get_cursor_visible, .{ .name = "ghostty_render_state_get_cursor_visible" });
++        @export(&c.render_state_get_bg_color, .{ .name = "ghostty_render_state_get_bg_color" });
++        @export(&c.render_state_get_fg_color, .{ .name = "ghostty_render_state_get_fg_color" });
++        @export(&c.render_state_is_row_dirty, .{ .name = "ghostty_render_state_is_row_dirty" });
++        @export(&c.render_state_mark_clean, .{ .name = "ghostty_render_state_mark_clean" });
++        @export(&c.render_state_get_viewport, .{ .name = "ghostty_render_state_get_viewport" });
++        @export(&c.render_state_get_grapheme, .{ .name = "ghostty_render_state_get_grapheme" });
++
++        // Terminal modes
++        @export(&c.terminal_is_alternate_screen, .{ .name = "ghostty_terminal_is_alternate_screen" });
++        @export(&c.terminal_has_mouse_tracking, .{ .name = "ghostty_terminal_has_mouse_tracking" });
++        @export(&c.terminal_get_mode, .{ .name = "ghostty_terminal_get_mode" });
++
++        // Scrollback API
++        @export(&c.terminal_get_scrollback_length, .{ .name = "ghostty_terminal_get_scrollback_length" });
++        @export(&c.terminal_get_scrollback_line, .{ .name = "ghostty_terminal_get_scrollback_line" });
++        @export(&c.terminal_get_scrollback_grapheme, .{ .name = "ghostty_terminal_get_scrollback_grapheme" });
++        @export(&c.terminal_is_row_wrapped, .{ .name = "ghostty_terminal_is_row_wrapped" });
++
++        // Hyperlink API
++        @export(&c.terminal_get_hyperlink_uri, .{ .name = "ghostty_terminal_get_hyperlink_uri" });
++        @export(&c.terminal_get_scrollback_hyperlink_uri, .{ .name = "ghostty_terminal_get_scrollback_hyperlink_uri" });
++
++        // Kitty graphics API
++        @export(&c.terminal_has_kitty_graphics, .{ .name = "ghostty_terminal_has_kitty_graphics" });
++        @export(&c.terminal_is_kitty_graphics_dirty, .{ .name = "ghostty_terminal_is_kitty_graphics_dirty" });
++        @export(&c.terminal_mark_kitty_graphics_clean, .{ .name = "ghostty_terminal_mark_kitty_graphics_clean" });
++        @export(&c.terminal_get_kitty_image_placement_count, .{ .name = "ghostty_terminal_get_kitty_image_placement_count" });
++        @export(&c.terminal_get_kitty_image_placements, .{ .name = "ghostty_terminal_get_kitty_image_placements" });
++        @export(&c.terminal_get_kitty_image_metadata, .{ .name = "ghostty_terminal_get_kitty_image_metadata" });
++        @export(&c.terminal_get_kitty_image_data, .{ .name = "ghostty_terminal_get_kitty_image_data" });
++
++        // Response API (for DSR and other queries)
++        @export(&c.terminal_has_response, .{ .name = "ghostty_terminal_has_response" });
++        @export(&c.terminal_read_response, .{ .name = "ghostty_terminal_read_response" });
+ 
+         // On Wasm we need to export our allocator convenience functions.
+         if (builtin.target.cpu.arch.isWasm()) {
+diff --git a/src/renderer/generic.zig b/src/renderer/generic.zig
+index 8c55da602..9aac9d5bf 100644
+--- a/src/renderer/generic.zig
++++ b/src/renderer/generic.zig
+@@ -1912,7 +1912,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
+             // it is the identical image so we don't need to send it to the GPU.
+             const gop = try self.images.getOrPut(self.alloc, image.id);
+             if (gop.found_existing and
+-                gop.value_ptr.transmit_time.order(image.transmit_time) == .eq)
++                gop.value_ptr.transmit_time == image.transmit_time)
+             {
+                 return;
+             }
+diff --git a/src/renderer/image.zig b/src/renderer/image.zig
+index 7089f5a8b..2a4e00331 100644
+--- a/src/renderer/image.zig
++++ b/src/renderer/image.zig
+@@ -37,7 +37,7 @@ pub const Placement = struct {
+ /// The map used for storing images.
+ pub const ImageMap = std.AutoHashMapUnmanaged(u32, struct {
+     image: Image,
+-    transmit_time: std.time.Instant,
++    transmit_time: u32,
+ });
+ 
+ /// The state for a single image that is to be rendered.
+diff --git a/src/terminal/build_options.zig b/src/terminal/build_options.zig
+index e209a56fa..6fbc315e6 100644
+--- a/src/terminal/build_options.zig
++++ b/src/terminal/build_options.zig
+@@ -14,6 +14,9 @@ pub const Options = struct {
+     ///
+     oniguruma: bool,
+ 
++    /// Whether Kitty graphics protocol support is available.
++    kitty_graphics: bool,
++
+     /// Whether to build SIMD-accelerated code paths. This pulls in more
+     /// build-time dependencies and adds libc as a runtime dependency,
+     /// but results in significant performance improvements.
+@@ -28,6 +31,9 @@ pub const Options = struct {
+     /// Options.
+     c_abi: bool,
+ 
++    /// Whether tmux control mode support is available.
++    tmux_control_mode: bool,
++
+     /// Add the required build options for the terminal module.
+     pub fn add(
+         self: Options,
+@@ -38,12 +44,10 @@ pub const Options = struct {
+         opts.addOption(Artifact, "artifact", self.artifact);
+         opts.addOption(bool, "c_abi", self.c_abi);
+         opts.addOption(bool, "oniguruma", self.oniguruma);
++        opts.addOption(bool, "kitty_graphics", self.kitty_graphics);
+         opts.addOption(bool, "simd", self.simd);
+         opts.addOption(bool, "slow_runtime_safety", self.slow_runtime_safety);
+-
+-        // These are synthesized based on other options.
+-        opts.addOption(bool, "kitty_graphics", self.oniguruma);
+-        opts.addOption(bool, "tmux_control_mode", self.oniguruma);
++        opts.addOption(bool, "tmux_control_mode", self.tmux_control_mode);
+ 
+         m.addOptions("terminal_options", opts);
+     }
+diff --git a/src/terminal/c/main.zig b/src/terminal/c/main.zig
+index bc92597f5..0aae7aa50 100644
+--- a/src/terminal/c/main.zig
++++ b/src/terminal/c/main.zig
+@@ -4,6 +4,7 @@ pub const key_event = @import("key_event.zig");
+ pub const key_encode = @import("key_encode.zig");
+ pub const paste = @import("paste.zig");
+ pub const sgr = @import("sgr.zig");
++pub const terminal = @import("terminal.zig");
+ 
+ // The full C API, unexported.
+ pub const osc_new = osc.new;
+@@ -52,6 +53,56 @@ pub const key_encoder_encode = key_encode.encode;
+ 
+ pub const paste_is_safe = paste.is_safe;
+ 
++// Terminal lifecycle
++pub const terminal_new = terminal.new;
++pub const terminal_new_with_config = terminal.newWithConfig;
++pub const terminal_free = terminal.free;
++pub const terminal_resize = terminal.resize;
++pub const terminal_write = terminal.write;
++pub const terminal_set_pixel_size = terminal.setPixelSize;
++
++// RenderState API - high-performance rendering
++pub const render_state_update = terminal.renderStateUpdate;
++pub const render_state_get_cols = terminal.renderStateGetCols;
++pub const render_state_get_rows = terminal.renderStateGetRows;
++pub const render_state_get_cursor_x = terminal.renderStateGetCursorX;
++pub const render_state_get_cursor_y = terminal.renderStateGetCursorY;
++pub const render_state_get_cursor_visible = terminal.renderStateGetCursorVisible;
++pub const render_state_get_bg_color = terminal.renderStateGetBgColor;
++pub const render_state_get_fg_color = terminal.renderStateGetFgColor;
++pub const render_state_is_row_dirty = terminal.renderStateIsRowDirty;
++pub const render_state_mark_clean = terminal.renderStateMarkClean;
++pub const render_state_get_viewport = terminal.renderStateGetViewport;
++pub const render_state_get_grapheme = terminal.renderStateGetGrapheme;
++
++// Terminal modes
++pub const terminal_is_alternate_screen = terminal.isAlternateScreen;
++pub const terminal_has_mouse_tracking = terminal.hasMouseTracking;
++pub const terminal_get_mode = terminal.getMode;
++
++// Scrollback API
++pub const terminal_get_scrollback_length = terminal.getScrollbackLength;
++pub const terminal_get_scrollback_line = terminal.getScrollbackLine;
++pub const terminal_get_scrollback_grapheme = terminal.getScrollbackGrapheme;
++pub const terminal_is_row_wrapped = terminal.isRowWrapped;
++
++// Hyperlink API
++pub const terminal_get_hyperlink_uri = terminal.getHyperlinkUri;
++pub const terminal_get_scrollback_hyperlink_uri = terminal.getScrollbackHyperlinkUri;
++
++// Kitty graphics API
++pub const terminal_has_kitty_graphics = terminal.hasKittyGraphics;
++pub const terminal_is_kitty_graphics_dirty = terminal.isKittyGraphicsDirty;
++pub const terminal_mark_kitty_graphics_clean = terminal.markKittyGraphicsClean;
++pub const terminal_get_kitty_image_placement_count = terminal.getKittyImagePlacementCount;
++pub const terminal_get_kitty_image_placements = terminal.getKittyImagePlacements;
++pub const terminal_get_kitty_image_metadata = terminal.getKittyImageMetadata;
++pub const terminal_get_kitty_image_data = terminal.getKittyImageData;
++
++// Response API (for DSR and other queries)
++pub const terminal_has_response = terminal.hasResponse;
++pub const terminal_read_response = terminal.readResponse;
++
+ test {
+     _ = color;
+     _ = osc;
+@@ -59,6 +110,7 @@ test {
+     _ = key_encode;
+     _ = paste;
+     _ = sgr;
++    _ = terminal;
+ 
+     // We want to make sure we run the tests for the C allocator interface.
+     _ = @import("../../lib/allocator.zig");
+diff --git a/src/terminal/kitty/graphics_image.zig b/src/terminal/kitty/graphics_image.zig
+index d2877cfc2..96ab7639c 100644
+--- a/src/terminal/kitty/graphics_image.zig
++++ b/src/terminal/kitty/graphics_image.zig
+@@ -8,7 +8,7 @@ const posix = std.posix;
+ const fastmem = @import("../../fastmem.zig");
+ const command = @import("graphics_command.zig");
+ const PageList = @import("../PageList.zig");
+-const wuffs = @import("wuffs");
++const wuffs = if (builtin.target.cpu.arch.isWasm()) struct {} else @import("wuffs");
+ 
+ const temp_dir = struct {
+     const TempDir = @import("../../os/TempDir.zig");
+@@ -18,6 +18,8 @@ const temp_dir = struct {
+ 
+ const log = std.log.scoped(.kitty_gfx);
+ 
++var transmit_time_counter: std.atomic.Value(u32) = .init(1);
++
+ /// Maximum width or height of an image. Taken directly from Kitty.
+ const max_dimension = 10000;
+ 
+@@ -72,6 +74,11 @@ pub const LoadingImage = struct {
+             return result;
+         }
+ 
++        if (comptime builtin.target.cpu.arch.isWasm()) {
++            log.warn("kitty graphics medium unsupported in wasm medium={}", .{t.medium});
++            return error.UnsupportedMedium;
++        }
++
+         // Otherwise, the payload data is guaranteed to be a path.
+ 
+         if (comptime builtin.os.tag != .windows) {
+@@ -334,30 +341,37 @@ pub const LoadingImage = struct {
+         // Decompress the data if it is compressed.
+         try self.decompress(alloc);
+ 
+-        // Decode the png if we have to
+-        if (img.format == .png) try self.decodePng(alloc);
++        // Decode the png if we have to. In wasm we keep the original PNG
++        // payload and only parse the header so the browser can decode bytes.
++        if (img.format == .png) {
++            if (comptime builtin.target.cpu.arch.isWasm()) {
++                try self.parsePngHeader();
++            } else {
++                try self.decodePng(alloc);
++            }
++        }
+ 
+         // Validate our dimensions.
+         if (img.width == 0 or img.height == 0) return error.DimensionsRequired;
+         if (img.width > max_dimension or img.height > max_dimension) return error.DimensionsTooLarge;
+ 
+-        // Data length must be what we expect
+-        const bpp = img.format.bpp();
+-        const expected_len = img.width * img.height * bpp;
+-        const actual_len = self.data.items.len;
+-        if (actual_len != expected_len) {
+-            std.log.warn(
+-                "unexpected length image id={} width={} height={} bpp={} expected_len={} actual_len={}",
+-                .{ img.id, img.width, img.height, bpp, expected_len, actual_len },
+-            );
+-            return error.InvalidData;
++        // Data length must be what we expect for raw pixel payloads. PNG data
++        // remains encoded on wasm so the browser can decode it.
++        if (img.format != .png) {
++            const bpp = img.format.bpp();
++            const expected_len = img.width * img.height * bpp;
++            const actual_len = self.data.items.len;
++            if (actual_len != expected_len) {
++                std.log.warn(
++                    "unexpected length image id={} width={} height={} bpp={} expected_len={} actual_len={}",
++                    .{ img.id, img.width, img.height, bpp, expected_len, actual_len },
++                );
++                return error.InvalidData;
++            }
+         }
+ 
+         // Set our time
+-        self.image.transmit_time = std.time.Instant.now() catch |err| {
+-            log.warn("failed to get time: {}", .{err});
+-            return error.InternalError;
+-        };
++        self.image.transmit_time = nextTransmitTime();
+ 
+         // Everything looks good, copy the image data over.
+         var result = self.image;
+@@ -425,6 +439,7 @@ pub const LoadingImage = struct {
+     /// Decode the data as PNG. This will also updated the image dimensions.
+     fn decodePng(self: *LoadingImage, alloc: Allocator) !void {
+         assert(self.image.format == .png);
++        if (comptime builtin.target.cpu.arch.isWasm()) return error.UnsupportedFormat;
+ 
+         const result = wuffs.png.decode(
+             alloc,
+@@ -452,6 +467,25 @@ pub const LoadingImage = struct {
+         self.image.height = result.height;
+         self.image.format = .rgba;
+     }
++
++    fn parsePngHeader(self: *LoadingImage) !void {
++        assert(self.image.format == .png);
++
++        const header_len = 24;
++        if (self.data.items.len < header_len) return error.InvalidData;
++
++        const signature = "\x89PNG\r\n\x1a\n";
++        if (!std.mem.eql(u8, self.data.items[0..signature.len], signature)) {
++            return error.InvalidData;
++        }
++
++        const ihdr_length = std.mem.readInt(u32, self.data.items[8..12], .big);
++        if (ihdr_length != 13) return error.InvalidData;
++        if (!std.mem.eql(u8, self.data.items[12..16], "IHDR")) return error.InvalidData;
++
++        self.image.width = std.mem.readInt(u32, self.data.items[16..20], .big);
++        self.image.height = std.mem.readInt(u32, self.data.items[20..24], .big);
++    }
+ };
+ 
+ /// Image represents a single fully loaded image.
+@@ -463,7 +497,7 @@ pub const Image = struct {
+     format: command.Transmission.Format = .rgb,
+     compression: command.Transmission.Compression = .none,
+     data: []const u8 = "",
+-    transmit_time: std.time.Instant = undefined,
++    transmit_time: u32 = 0,
+ 
+     /// Set this to true if this image was loaded by a command that
+     /// doesn't specify an ID or number, since such commands should
+@@ -497,6 +531,10 @@ pub const Image = struct {
+     }
+ };
+ 
++fn nextTransmitTime() u32 {
++    return transmit_time_counter.fetchAdd(1, .monotonic);
++}
++
+ /// The rect taken up by some image placement, in grid cells. This will
+ /// be rounded up to the nearest grid cell since we can't place images
+ /// in partial grid cells.
+diff --git a/src/terminal/kitty/graphics_storage.zig b/src/terminal/kitty/graphics_storage.zig
+index 8ff68e3fa..24fbd6689 100644
+--- a/src/terminal/kitty/graphics_storage.zig
++++ b/src/terminal/kitty/graphics_storage.zig
+@@ -203,7 +203,7 @@ pub const ImageStorage = struct {
+         while (it.next()) |kv| {
+             if (kv.value_ptr.number == image_number) {
+                 if (newest == null or
+-                    kv.value_ptr.transmit_time.order(newest.?.transmit_time) == .gt)
++                    kv.value_ptr.transmit_time > newest.?.transmit_time)
+                 {
+                     newest = kv.value_ptr.*;
+                 }
+@@ -522,7 +522,7 @@ pub const ImageStorage = struct {
+         // bit is fine compared to the megabytes we're looking to save.
+         const Candidate = struct {
+             id: u32,
+-            time: std.time.Instant,
++            time: u32,
+             used: bool,
+         };
+ 
+@@ -569,11 +569,10 @@ pub const ImageStorage = struct {
+                     _ = ctx;
+ 
+                     // If they're usage matches, then its based on time.
+-                    if (lhs.used == rhs.used) return switch (lhs.time.order(rhs.time)) {
+-                        .lt => true,
+-                        .gt => false,
+-                        .eq => lhs.id < rhs.id,
+-                    };
++                    if (lhs.used == rhs.used) {
++                        if (lhs.time != rhs.time) return lhs.time < rhs.time;
++                        return lhs.id < rhs.id;
++                    }
+ 
+                     // If not used, then its a better candidate
+                     return !lhs.used;
+diff --git a/src/terminal/render.zig b/src/terminal/render.zig
+index b6430ea34..10e0ef79d 100644
+--- a/src/terminal/render.zig
++++ b/src/terminal/render.zig
+@@ -322,13 +322,14 @@ pub const RenderState = struct {
+         // Colors.
+         self.colors.cursor = t.colors.cursor.get();
+         self.colors.palette = t.colors.palette.current;
+-        bg_fg: {
++        {
+             // Background/foreground can be unset initially which would
+-            // depend on "default" background/foreground. The expected use
+-            // case of Terminal is that the caller set their own configured
+-            // defaults on load so this doesn't happen.
+-            const bg = t.colors.background.get() orelse break :bg_fg;
+-            const fg = t.colors.foreground.get() orelse break :bg_fg;
++            // depend on "default" background/foreground. Use sensible defaults
++            // (black background, light gray foreground) when not explicitly set.
++            const default_bg: color.RGB = .{ .r = 0, .g = 0, .b = 0 };
++            const default_fg: color.RGB = .{ .r = 204, .g = 204, .b = 204 };
++            const bg = t.colors.background.get() orelse default_bg;
++            const fg = t.colors.foreground.get() orelse default_fg;
+             if (t.modes.get(.reverse_colors)) {
+                 self.colors.background = fg;
+                 self.colors.foreground = bg;

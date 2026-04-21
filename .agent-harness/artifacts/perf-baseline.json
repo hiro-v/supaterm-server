@@ -1,0 +1,217 @@
+{
+  "generatedAt": "2026-04-20T12:28:37.337Z",
+  "commit": "786971dc623cf7e24ad340b4eadd9806885593be",
+  "ci": {
+    "runUrl": "https://github.com/hiro-v/supaterm-server/actions/runs/24335799504",
+    "jobs": [
+      {
+        "job": "core (macos-latest)",
+        "seconds": 158
+      },
+      {
+        "job": "browser (macos-latest)",
+        "seconds": 129
+      },
+      {
+        "job": "core (ubuntu-latest)",
+        "seconds": 197
+      },
+      {
+        "job": "browser (ubuntu-latest)",
+        "seconds": 81
+      }
+    ]
+  },
+  "build": {
+    "wasmBytes": 423910,
+    "wasmAssetBytes": 423910,
+    "jsAssetBytes": 177031,
+    "cssAssetBytes": 12024,
+    "jsMapBytes": 611994
+  },
+  "browser": {
+    "singlePaneSamples": [
+      {
+        "shellReadyMs": 70.79,
+        "firstTerminalCanvasMs": 76.36,
+        "firstPaneConnectedMs": 81.39,
+        "startup": {
+          "bootstrapStartedMs": 11.9,
+          "workbenchMountedMs": 15.6,
+          "rendererReadyMs": 33.6,
+          "websocketOpenMs": 72.2,
+          "firstTerminalBytesMs": 79.2,
+          "firstPaneConnectedMarkMs": 72.3,
+          "serverSessionReused": false,
+          "serverSessionAgeMs": 4,
+          "serverOutputPumpStartedMs": 0,
+          "serverFirstBackendReadMs": 4,
+          "serverFirstBroadcastMs": 4
+        },
+        "renderer": {
+          "atlasGlyphEntries": 54,
+          "atlasWidth": 1024,
+          "atlasHeight": 1024,
+          "atlasResetCount": 0,
+          "activeGlyphQuads": 230,
+          "activeRects": 27,
+          "rectBufferCapacityBytes": 4096,
+          "glyphBufferCapacityBytes": 8192,
+          "uploadBytes": 0,
+          "frameCpuMs": 0.2,
+          "frameCpuAvgMs": 0.28
+        }
+      }
+    ],
+    "fourPaneSamples": [
+      {
+        "fourPaneLayoutMs": 116.64,
+        "fourPaneConnectedMs": 164.7,
+        "startup": {
+          "bootstrapStartedMs": 17.7,
+          "workbenchMountedMs": 21.5,
+          "rendererReadyMs": 39.6,
+          "websocketOpenMs": 49.9,
+          "firstTerminalBytesMs": 75.2,
+          "firstPaneConnectedMarkMs": 50,
+          "serverSessionReused": false,
+          "serverSessionAgeMs": 4,
+          "serverOutputPumpStartedMs": 0,
+          "serverFirstBackendReadMs": 4,
+          "serverFirstBroadcastMs": 4
+        },
+        "renderer": {
+          "atlasGlyphEntries": 54,
+          "atlasWidth": 1024,
+          "atlasHeight": 1024,
+          "atlasResetCount": 0,
+          "activeGlyphQuads": 230,
+          "activeRects": 27,
+          "rectBufferCapacityBytes": 4096,
+          "glyphBufferCapacityBytes": 8192,
+          "uploadBytes": 0,
+          "frameCpuMs": 0.2,
+          "frameCpuAvgMs": 0.24
+        }
+      }
+    ],
+    "averages": {
+      "shellReadyMs": 70.79,
+      "firstTerminalCanvasMs": 76.36,
+      "firstPaneConnectedMs": 81.39,
+      "fourPaneLayoutMs": 116.64,
+      "fourPaneConnectedMs": 164.7,
+      "startup": {
+        "bootstrapStartedMs": 11.9,
+        "workbenchMountedMs": 15.6,
+        "rendererReadyMs": 33.6,
+        "websocketOpenMs": 72.2,
+        "firstTerminalBytesMs": 79.2,
+        "firstPaneConnectedMarkMs": 72.3,
+        "serverSessionReused": false,
+        "serverSessionAgeMs": 4,
+        "serverOutputPumpStartedMs": 0,
+        "serverFirstBackendReadMs": 4,
+        "serverFirstBroadcastMs": 4
+      },
+      "renderer": {
+        "atlasGlyphEntries": 54,
+        "atlasWidth": 1024,
+        "atlasHeight": 1024,
+        "atlasResetCount": 0,
+        "activeGlyphQuads": 230,
+        "activeRects": 27,
+        "rectBufferCapacityBytes": 4096,
+        "glyphBufferCapacityBytes": 8192,
+        "uploadBytes": 0,
+        "frameCpuMs": 0.2,
+        "frameCpuAvgMs": 0.26
+      }
+    },
+    "percentiles": {
+      "p50": {
+        "shellReadyMs": 70.79,
+        "firstTerminalCanvasMs": 76.36,
+        "firstPaneConnectedMs": 81.39,
+        "fourPaneLayoutMs": 116.64,
+        "fourPaneConnectedMs": 164.7,
+        "startup": {
+          "bootstrapStartedMs": 11.9,
+          "workbenchMountedMs": 15.6,
+          "rendererReadyMs": 33.6,
+          "websocketOpenMs": 72.2,
+          "firstTerminalBytesMs": 79.2,
+          "firstPaneConnectedMarkMs": 72.3,
+          "serverSessionReused": false,
+          "serverSessionAgeMs": 4,
+          "serverOutputPumpStartedMs": 0,
+          "serverFirstBackendReadMs": 4,
+          "serverFirstBroadcastMs": 4
+        },
+        "renderer": {
+          "atlasGlyphEntries": 54,
+          "atlasWidth": 1024,
+          "atlasHeight": 1024,
+          "atlasResetCount": 0,
+          "activeGlyphQuads": 230,
+          "activeRects": 27,
+          "rectBufferCapacityBytes": 4096,
+          "glyphBufferCapacityBytes": 8192,
+          "uploadBytes": 0,
+          "frameCpuMs": 0.2,
+          "frameCpuAvgMs": 0.24
+        }
+      },
+      "p95": {
+        "shellReadyMs": 70.79,
+        "firstTerminalCanvasMs": 76.36,
+        "firstPaneConnectedMs": 81.39,
+        "fourPaneLayoutMs": 116.64,
+        "fourPaneConnectedMs": 164.7,
+        "startup": {
+          "bootstrapStartedMs": 11.9,
+          "workbenchMountedMs": 15.6,
+          "rendererReadyMs": 33.6,
+          "websocketOpenMs": 72.2,
+          "firstTerminalBytesMs": 79.2,
+          "firstPaneConnectedMarkMs": 72.3,
+          "serverSessionReused": false,
+          "serverSessionAgeMs": 4,
+          "serverOutputPumpStartedMs": 0,
+          "serverFirstBackendReadMs": 4,
+          "serverFirstBroadcastMs": 4
+        },
+        "renderer": {
+          "atlasGlyphEntries": 54,
+          "atlasWidth": 1024,
+          "atlasHeight": 1024,
+          "atlasResetCount": 0,
+          "activeGlyphQuads": 230,
+          "activeRects": 27,
+          "rectBufferCapacityBytes": 4096,
+          "glyphBufferCapacityBytes": 8192,
+          "uploadBytes": 0,
+          "frameCpuMs": 0.2,
+          "frameCpuAvgMs": 0.28
+        }
+      }
+    }
+  },
+  "moduleSizes": {
+    "zig": {
+      "src/main.zig": 720,
+      "src/session_manager.zig": 740,
+      "src/session_backends.zig": 707,
+      "src/session_http.zig": 238
+    },
+    "workbench": {
+      "web/src/workbench.ts": 596,
+      "web/src/workbench/state.ts": 152,
+      "web/src/workbench/commands.ts": 146,
+      "web/src/workbench/overlay.ts": 241,
+      "web/src/workbench/panes.ts": 163,
+      "web/src/workbench/sidebar.ts": 78,
+      "web/src/workbench/persistence.ts": 62
+    }
+  }
+}
