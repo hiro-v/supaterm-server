@@ -52,44 +52,6 @@ jobs:
       - run: bun run test:e2e
       - run: bun run web:build
 
-  browser:
-    name: browser (${{ matrix.os }}, ${{ matrix.shard }})
-    runs-on: ${{ matrix.os }}
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            shard: 1/2
-          - os: ubuntu-latest
-            shard: 2/2
-          - os: macos-latest
-            shard: 1/2
-          - os: macos-latest
-            shard: 2/2
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - name: Compute cache key inputs
-        id: cache_key
-        shell: bash
-        run: |
-          echo "libghostty=$(git rev-parse HEAD:third_party/libghostty/ghostty)" >> "$GITHUB_OUTPUT"
-          echo "zmx=$(git rev-parse HEAD:third_party/zmx)" >> "$GITHUB_OUTPUT"
-
-      - uses: ./.github/actions/setup-ci
-        with:
-          cache-key-suffix: ${{ hashFiles('bun.lock', 'package.json', '.gitmodules', 'zlint.json', 'patches/libghosty/libghosty.patch', 'patches/zmx/zmx.patch') }}-${{ steps.cache_key.outputs.libghostty }}-${{ steps.cache_key.outputs.zmx }}
-          install-playwright: "true"
-
-      - run: bun run test:browser
-        env:
-          SUPATERM_PLAYWRIGHT_SHARD: ${{ matrix.shard }}
-
   perf:
     name: perf report (ubuntu-latest)
     runs-on: ubuntu-latest

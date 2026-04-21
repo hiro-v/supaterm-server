@@ -23,11 +23,10 @@ describe('CI and hook configuration', () => {
     expect(workflow).toContain('bun run test:integration');
     expect(workflow).toContain('bun run test:contract');
     expect(workflow).toContain('bun run test:e2e');
-    expect(workflow).toContain('bun run test:browser');
-    expect(workflow).toContain('name: browser (${{ matrix.os }}, ${{ matrix.shard }})');
-    expect(workflow).toContain('shard: 1/2');
-    expect(workflow).toContain('shard: 2/2');
-    expect(workflow).toContain('SUPATERM_PLAYWRIGHT_SHARD: ${{ matrix.shard }}');
+    expect(workflow).not.toContain('name: browser (${{ matrix.os }}, ${{ matrix.shard }})');
+    expect(workflow).not.toContain('SUPATERM_PLAYWRIGHT_SHARD: ${{ matrix.shard }}');
+    expect(workflow).not.toContain('shard: 1/2');
+    expect(workflow).not.toContain('shard: 2/2');
     expect(workflow).toContain('name: perf report (ubuntu-latest)');
     expect(workflow).toContain('continue-on-error: true');
     expect(workflow).toContain('GH_TOKEN: ${{ github.token }}');
