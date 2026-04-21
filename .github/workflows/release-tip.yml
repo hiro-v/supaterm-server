@@ -47,7 +47,7 @@ jobs:
 
       - name: Build release binary with embedded web assets
         shell: bash
-        run: zig build -Dembed-assets=true -Doptimize=ReleaseSafe
+        run: zig build --release=small -Dembed-assets=true
 
       - name: Package artifact
         shell: bash
