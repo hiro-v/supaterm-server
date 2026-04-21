@@ -18,6 +18,7 @@ const DOC_ONLY_PATTERNS = [
 
 const WEB_PATTERNS = [
   /^web\//,
+  /^proxy\//,
   /^tests\/unit\//,
   /^tests\/browser\//,
   /^package\.json$/,

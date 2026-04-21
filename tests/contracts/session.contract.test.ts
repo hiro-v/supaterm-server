@@ -38,7 +38,7 @@ type ShellCapabilities = {
 describe('session API contract', () => {
   const sessionId = 'contract.session:v1';
   const shareSecret = 'contract-secret';
-  let server: StartedServer;
+  let server: StartedServer | null = null;
 
   beforeAll(async () => {
     server = await startServer({
@@ -55,7 +55,7 @@ describe('session API contract', () => {
 
   test('metadata endpoint exposes the expected exact field set without token leakage', async () => {
     const { status, payload } = await fetchJson<SessionMetadata>(
-      `${server.baseUrl}/api/sessions/${encodeURIComponent(sessionId)}`,
+      `${server!.baseUrl}/api/sessions/${encodeURIComponent(sessionId)}`,
     );
 
     expect(status).toBe(200);
@@ -82,9 +82,11 @@ describe('session API contract', () => {
   });
 
   test('share grant endpoint returns the deterministic session grant contract', async () => {
+    const before = Date.now();
     const { status, payload } = await fetchJson<ShareGrant>(
-      `${server.baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/share`,
+      `${server!.baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/share`,
     );
+    const after = Date.now();
 
     expect(status).toBe(200);
     expect(Object.keys(payload).sort()).toEqual([
@@ -95,19 +97,19 @@ describe('session API contract', () => {
       'token_transport',
       'websocket_path',
     ]);
-    expect(payload).toEqual({
-      session_id: sessionId,
-      websocket_path: `/api/sessions/${sessionId}/ws`,
-      token: computeSessionShareToken(sessionId, shareSecret),
-      token_transport: 'query',
-      share_authority: 'server',
-      expires_at_unix_ms: null,
-    });
+    expect(payload.session_id).toBe(sessionId);
+    expect(payload.websocket_path).toBe(`/api/sessions/${sessionId}/ws`);
+    expect(payload.token).toBe(computeSessionShareToken(sessionId, shareSecret));
+    expect(payload.token_transport).toBe('query');
+    expect(payload.share_authority).toBe('server');
+    expect(payload.expires_at_unix_ms).not.toBeNull();
+    expect(payload.expires_at_unix_ms!).toBeGreaterThanOrEqual(before + 3_590_000);
+    expect(payload.expires_at_unix_ms!).toBeLessThanOrEqual(after + 3_600_000);
   });
 
   test('shell capability endpoint returns the expected host shell contract', async () => {
     const { status, payload } = await fetchJson<ShellCapabilities>(
-      `${server.baseUrl}/api/capabilities/shells`,
+      `${server!.baseUrl}/api/capabilities/shells`,
     );
 
     expect(status).toBe(200);

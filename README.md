@@ -90,6 +90,16 @@ mise exec -- bun run web:build
 The web and `zmx` scripts auto-apply tracked vendor patches before they build or test against vendored source. The browser bundle consumes the vendored `libghostty` TypeScript sources directly and uses the pinned `third_party/libghostty/ghostty-vt.wasm` artifact, so CI does not depend on Ghostty fetching extra upstream assets on every `web:build`.
 The default browser terminal visual profile is now a blackout baseline: black background, white foreground, `MesloLGS NF` at `15px`, and explicit Nerd Font symbol fallback for private-use icon glyphs such as `yazi` file icons. Users can change theme colors and font selection from the workbench, and those preferences persist with the shared snapshot.
 
+For Cloudflare relay hosting, keep `supaterm-server` local-only and let Zig stay the policy source:
+```bash
+./zig-out/bin/supaterm-server \
+  --listen 127.0.0.1:3000 \
+  --token-policy session \
+  --enable-share-api \
+  --share-token-secret "$SUPATERM_SHARE_TOKEN_SECRET"
+```
+The relay host then consumes `GET /api/sessions/{id}/share`, opens the local session websocket with that token, and publishes the relay socket with host-chosen `mode`, `title`, and the Zig-issued `expires_at_unix_ms`. The Cloudflare relay still caps missing or oversized expiries to 60 minutes so Durable Object state expires quickly. See [docs/cloudflare-proxy.md](docs/cloudflare-proxy.md).
+
 Build the single embedded release binary:
 ```bash
 mise run release
@@ -214,6 +224,7 @@ Start here:
 Supporting references:
 - Agent workflow: [AGENTS.md](AGENTS.md)
 - Code structure notes: [docs/code-structure.md](docs/code-structure.md)
+- Cloudflare relay package: [docs/cloudflare-proxy.md](docs/cloudflare-proxy.md)
 - Gap-closure exec plan: [docs/exec-plan-gap-closure.md](docs/exec-plan-gap-closure.md)
 - Performance baseline: [docs/performance-baseline.md](docs/performance-baseline.md)
 - Swift host contract: [docs/swift-host-integration.md](docs/swift-host-integration.md)

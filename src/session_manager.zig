@@ -36,6 +36,7 @@ pub const TokenPolicy = struct {
     mode: TokenPolicyMode = .open,
     global_token: ?[]const u8 = null,
     share_secret: ?[]const u8 = null,
+    share_grant_ttl_seconds: u32 = 3600,
 };
 
 pub const ShareAuthority = enum {
@@ -573,26 +574,31 @@ pub const SessionManager = struct {
             return issue_fn(self.share_issuer.context, allocator, session_id);
         }
 
+        const expires_at_unix_ms = computeShareGrantExpiry(self.token_policy.share_grant_ttl_seconds);
         return switch (self.token_policy.mode) {
             .open => ShareGrant{
                 .token = null,
                 .token_transport = .none,
+                .expires_at_unix_ms = expires_at_unix_ms,
                 .authority = .server,
             },
             .global => blk: {
                 const expected = self.token_policy.global_token orelse break :blk ShareGrant{
                     .token = null,
                     .token_transport = .none,
+                    .expires_at_unix_ms = expires_at_unix_ms,
                     .authority = .server,
                 };
                 if (expected.len == 0) break :blk ShareGrant{
                     .token = null,
                     .token_transport = .none,
+                    .expires_at_unix_ms = expires_at_unix_ms,
                     .authority = .server,
                 };
                 break :blk ShareGrant{
                     .token = try allocator.dupe(u8, expected),
                     .token_transport = .query,
+                    .expires_at_unix_ms = expires_at_unix_ms,
                     .authority = .server,
                     .token_owned = true,
                 };
@@ -606,6 +612,7 @@ pub const SessionManager = struct {
                 break :blk ShareGrant{
                     .token = try allocator.dupe(u8, token),
                     .token_transport = .query,
+                    .expires_at_unix_ms = expires_at_unix_ms,
                     .authority = .server,
                     .token_owned = true,
                 };
@@ -706,6 +713,11 @@ fn isValidSessionToken(session_id: []const u8, provided: []const u8, secret: []c
 fn nanosToMillis(value_ns: i128) u64 {
     if (value_ns <= 0) return 0;
     return @intCast(@divFloor(value_ns, std.time.ns_per_ms));
+}
+
+fn computeShareGrantExpiry(ttl_seconds: u32) i64 {
+    const ttl_ms: i64 = @as(i64, ttl_seconds) * std.time.ms_per_s;
+    return std.time.milliTimestamp() + ttl_ms;
 }
 
 pub fn writeAttachTraceFrame(fd: posix.fd_t, trace: AttachTrace) !void {
