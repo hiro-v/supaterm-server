@@ -1,6 +1,6 @@
 {
   "upstreamRef": "HEAD",
   "upstreamCommit": "5714ed07a1012573261b7b7e3ed2add9c1504496",
-  "updatedAt": "2026-04-21T08:38:02Z",
-  "patchFile": "/Users/hiro/Library/Developer/ghq/github.com/hiro-v/supaterm-server/patches/libghosty/libghosty.patch"
+  "updatedAt": "2026-04-21T09:16:03Z",
+  "patchFile": "patches/libghosty/libghosty.patch"
 }

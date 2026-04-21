@@ -1,8 +1,8 @@
 diff --git a/src/main.zig b/src/main.zig
-index 35d1058..bb6af6f 100644
+index 8520f1a..6830069 100644
 --- a/src/main.zig
 +++ b/src/main.zig
-@@ -91,6 +91,47 @@ pub fn main() !void {
+@@ -110,6 +110,47 @@ pub fn main() !void {
          const sesh = try socket.getSeshName(alloc, session_name orelse sesh_env);
          defer alloc.free(sesh);
          return history(&cfg, sesh, format);
@@ -50,11 +50,11 @@ index 35d1058..bb6af6f 100644
      } else if (std.mem.eql(u8, cmd, "attach") or std.mem.eql(u8, cmd, "a")) {
          const session_name = args.next() orelse "";
  
-@@ -873,6 +914,7 @@ fn help() !void {
-         \\Usage: zmx <command> [args]
+@@ -1128,6 +1169,7 @@ fn help() !void {
+         \\Usage: zmx <command> [args...]
          \\
          \\Commands:
-+        \\  [b]ootstrap <name> [command...] Ensure session exists without attaching a client
-         \\  [a]ttach <name> [command...]   Attach to session, creating session if needed
-         \\  [r]un <name> [command...]      Send command without attaching, creating session if needed
-         \\  [d]etach                       Detach all clients from current session (ctrl+\ for current client)
++        \\  [b]ootstrap <name> [command...]          Ensure session exists without attaching a client
+         \\  [a]ttach <name> [command...]             Attach to session, creating if needed
+         \\  [r]un <name> [-d] [--fish] [command...]  Send command without attaching
+         \\  [wr]ite <name> <file_path>               Write stdin to file_path through the session

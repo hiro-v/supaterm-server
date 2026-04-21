@@ -36,12 +36,16 @@ write_state() {
   mkdir -p "$(dirname "$STATE_FILE")"
   upstream_commit=$(git -C "$GHOSTTY_PATH" rev-parse HEAD)
   updated_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  patch_path_for_state="$PATCH_FILE"
+  case "$PATCH_FILE" in
+    "$ROOT"/*) patch_path_for_state=${PATCH_FILE#"$ROOT"/} ;;
+  esac
   cat >"$STATE_FILE" <<EOF
 {
   "upstreamRef": "$1",
   "upstreamCommit": "$upstream_commit",
   "updatedAt": "$updated_at",
-  "patchFile": "$PATCH_FILE"
+  "patchFile": "$patch_path_for_state"
 }
 EOF
 }
