@@ -11,7 +11,7 @@ describe('CI and hook configuration', () => {
     expect(hook).toContain('exec bun run ./scripts/pre-commit.ts');
   });
 
-  test('test workflow covers macOS and Linux with recursive submodules and cache setup', () => {
+  test('test workflow runs critical PR work in parallel and exposes a single pr_status gate', () => {
     const workflow = readRepoFile('.github/workflows/test.yml');
 
     expect(workflow).toContain('ubuntu-latest');
@@ -19,10 +19,20 @@ describe('CI and hook configuration', () => {
     expect(workflow).toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"');
     expect(workflow).toContain('submodules: recursive');
     expect(workflow).toContain('uses: ./.github/actions/setup-ci');
+    expect(workflow).toContain('name: quality (ubuntu-latest)');
+    expect(workflow).toContain('name: build (macos-latest)');
+    expect(workflow).toContain('name: pr_status');
+    expect(workflow).toContain('needs:');
+    expect(workflow).toContain('- quality_linux');
+    expect(workflow).toContain('- build_macos');
+    expect(workflow).toContain('name: Verify critical PR jobs');
+    expect(workflow).toContain('quality_linux=${{ needs.quality_linux.result }}');
+    expect(workflow).toContain('build_macos=${{ needs.build_macos.result }}');
     expect(workflow).toContain('bun run test:unit');
     expect(workflow).toContain('bun run test:integration');
     expect(workflow).toContain('bun run test:contract');
     expect(workflow).toContain('bun run test:e2e');
+    expect(workflow).toContain('bun run web:build');
     expect(workflow).not.toContain('name: browser (${{ matrix.os }}, ${{ matrix.shard }})');
     expect(workflow).not.toContain('SUPATERM_PLAYWRIGHT_SHARD: ${{ matrix.shard }}');
     expect(workflow).not.toContain('shard: 1/2');
@@ -128,7 +138,8 @@ describe('CI and hook configuration', () => {
     expect(wrapper).toContain('docker compose run --rm linux-dev');
     expect(wrapper).toContain('mise trust mise.toml && mise install && mise run check');
     expect(workflow).not.toContain('container:');
-    expect(workflow).toContain('runs-on: ${{ matrix.os }}');
+    expect(workflow).toContain('runs-on: ubuntu-latest');
+    expect(workflow).toContain('runs-on: macos-latest');
   });
 
   test('tip release workflow force-moves the tip tag and updates the prerelease', () => {
