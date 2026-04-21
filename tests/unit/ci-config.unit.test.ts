@@ -65,6 +65,21 @@ describe('CI and hook configuration', () => {
     expect(workflow).toContain('glyph buffer capacity');
   });
 
+  test('browser smoke workflow stays separate and non-blocking with a small cross-platform matrix', () => {
+    const workflow = readRepoFile('.github/workflows/browser-smoke.yml');
+    const packageJson = readRepoFile('package.json');
+
+    expect(workflow).toContain('name: browser-smoke');
+    expect(workflow).toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"');
+    expect(workflow).toContain('group: browser-smoke-${{ github.ref }}');
+    expect(workflow).toContain('continue-on-error: true');
+    expect(workflow).toContain('platform: linux');
+    expect(workflow).toContain('platform: macos');
+    expect(workflow).toContain('install-playwright: "true"');
+    expect(workflow).toContain('bun run test:browser:smoke');
+    expect(packageJson).toContain('"test:browser:smoke": "bun run ./scripts/test-browser.ts tests/browser/smoke.browser.spec.ts"');
+  });
+
   test('shared setup action restores Bun, Zig, and Playwright caches', () => {
     const action = readRepoFile('.github/actions/setup-ci/action.yml');
 
@@ -120,6 +135,9 @@ describe('CI and hook configuration', () => {
     const workflow = readRepoFile('.github/workflows/release-tip.yml');
 
     expect(workflow).toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"');
+    expect(workflow).toContain('group: ${{ github.workflow }}-${{ github.ref }}');
+    expect(workflow).toContain('platform: linux');
+    expect(workflow).toContain('platform: macos');
     expect(workflow).toContain('git tag -fa tip');
     expect(workflow).toContain('git push --force origin tip');
     expect(workflow).toContain('gh release create tip');
@@ -136,6 +154,9 @@ describe('CI and hook configuration', () => {
     expect(workflow).toContain('cron: "0 0 * * *"');
     expect(workflow).toContain('workflow_dispatch: {}');
     expect(workflow).toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"');
+    expect(workflow).toContain('group: ${{ github.workflow }}-${{ github.ref }}');
+    expect(workflow).toContain('platform: linux');
+    expect(workflow).toContain('platform: macos');
     expect(workflow).toContain('bun run --silent version:bump:patch');
     expect(workflow).toContain('git commit -m "chore(release): bump nightly version to ${VERSION}"');
     expect(workflow).toContain('TAG="v${VERSION}-nightly"');
@@ -155,6 +176,9 @@ describe('CI and hook configuration', () => {
 
     expect(workflow).toContain('workflow_dispatch: {}');
     expect(workflow).toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"');
+    expect(workflow).toContain('group: ${{ github.workflow }}-${{ github.ref }}');
+    expect(workflow).toContain('platform: linux');
+    expect(workflow).toContain('platform: macos');
     expect(workflow).toContain('bun run --silent version:current');
     expect(workflow).toContain('TAG="v${VERSION}"');
     expect(workflow).toContain('git tag -a "${TAG}"');

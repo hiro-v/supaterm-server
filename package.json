@@ -29,6 +29,7 @@
     "test:contract": "bun test tests/contracts",
     "test:e2e": "bun run zmx:apply && (cd third_party/zmx && zig build -Doptimize=ReleaseSafe) && bun test tests/e2e",
     "test:browser": "bun run ./scripts/test-browser.ts",
+    "test:browser:smoke": "bun run ./scripts/test-browser.ts tests/browser/smoke.browser.spec.ts",
     "hooks:install": "git config core.hooksPath .git-hooks",
     "hooks:pre-commit": "bun run ./scripts/pre-commit.ts",
     "zig": "zig build",

@@ -15,14 +15,19 @@ const server = await startServer({
 
 try {
   const shard = process.env.SUPATERM_PLAYWRIGHT_SHARD;
+  const testTargets = process.argv.slice(2);
   const args = [
     'playwright',
     'test',
-    'tests/browser',
     '--reporter=line',
     '--workers',
     process.env.SUPATERM_BROWSER_WORKERS ?? '1',
   ];
+  if (testTargets.length > 0) {
+    args.push(...testTargets);
+  } else {
+    args.push('tests/browser');
+  }
   if (shard) {
     args.push('--shard', shard);
   }

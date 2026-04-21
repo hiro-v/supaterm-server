@@ -7,7 +7,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 concurrency:
-  group: ${{ github.workflow }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -58,9 +58,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: macos-latest
+            platform: macos
     steps:
       - uses: actions/checkout@v6
         with:
@@ -90,7 +92,7 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: prod-${{ matrix.os }}
+          name: prod-${{ matrix.platform }}
           path: |
             dist/*.tar.gz
             dist/*.sha256
