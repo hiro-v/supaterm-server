@@ -25,6 +25,7 @@ describe('CI and hook configuration', () => {
     expect(workflow).toContain('bun run test:browser');
     expect(workflow).toContain('name: perf report (ubuntu-latest)');
     expect(workflow).toContain('continue-on-error: true');
+    expect(workflow).toContain('GH_TOKEN: ${{ github.token }}');
     expect(workflow).toContain('name: Resolve perf baseline source');
     expect(workflow).toContain('mkdir -p .agent-harness/artifacts');
     expect(workflow).toContain('git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"');

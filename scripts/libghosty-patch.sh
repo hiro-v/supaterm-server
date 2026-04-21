@@ -19,7 +19,9 @@ Usage:
   sh ./scripts/libghosty-patch.sh apply [--patch-file path]
   sh ./scripts/libghosty-patch.sh sync [--remote origin] [--ref main] [--patch-file path] [--build]
 
-This workflow uses plain git patch/apply semantics.
+This workflow patches the real upstream ghostty submodule. Wrapper files under
+third_party/libghostty/ remain normal repo files and should be committed
+directly in the main repository.
 EOF
 }
 
@@ -81,7 +83,7 @@ mkdir -p "$(dirname "$PATCH_FILE")"
 
 case "$COMMAND" in
   patch)
-    git -C "$ROOT" diff --binary --no-ext-diff -- "$PACKAGE_PATH" >"$PATCH_FILE"
+    git -C "$GHOSTTY_PATH" diff --binary --no-ext-diff >"$PATCH_FILE"
     write_state "HEAD"
     printf '[libghosty] patch written to %s\n' "$PATCH_FILE"
     ;;
@@ -94,12 +96,12 @@ case "$COMMAND" in
       printf '[libghosty] patch is empty, skipping\n'
       exit 0
     fi
-    if git -C "$ROOT" apply --reverse --check "$PATCH_FILE" >/dev/null 2>&1; then
+    if git -C "$GHOSTTY_PATH" apply --reverse --check "$PATCH_FILE" >/dev/null 2>&1; then
       printf '[libghosty] patch already applied, skipping\n'
       exit 0
     fi
-    git -C "$ROOT" apply --check "$PATCH_FILE"
-    git -C "$ROOT" apply --reject --whitespace=nowarn "$PATCH_FILE"
+    git -C "$GHOSTTY_PATH" apply --check "$PATCH_FILE"
+    git -C "$GHOSTTY_PATH" apply --reject --whitespace=nowarn "$PATCH_FILE"
     write_state "HEAD"
     printf '[libghosty] patch applied from %s\n' "$PATCH_FILE"
     ;;
@@ -113,12 +115,12 @@ case "$COMMAND" in
     git -C "$GHOSTTY_PATH" reset --hard "$(git -C "$GHOSTTY_PATH" rev-parse "$TARGET_REF")"
     git -C "$GHOSTTY_PATH" clean -fd
     if [ -f "$PATCH_FILE" ] && [ -s "$PATCH_FILE" ]; then
-      if git -C "$ROOT" apply --reverse --check "$PATCH_FILE" >/dev/null 2>&1; then
-        printf '[libghosty] wrapper patch already applied, skipping\n'
+      if git -C "$GHOSTTY_PATH" apply --reverse --check "$PATCH_FILE" >/dev/null 2>&1; then
+        printf '[libghosty] upstream patch already applied, skipping\n'
       else
-        git -C "$ROOT" apply --check "$PATCH_FILE"
-        git -C "$ROOT" apply --reject --whitespace=nowarn "$PATCH_FILE"
-        printf '[libghosty] wrapper patch applied from %s\n' "$PATCH_FILE"
+        git -C "$GHOSTTY_PATH" apply --check "$PATCH_FILE"
+        git -C "$GHOSTTY_PATH" apply --reject --whitespace=nowarn "$PATCH_FILE"
+        printf '[libghosty] upstream patch applied from %s\n' "$PATCH_FILE"
       fi
     else
       printf '[libghosty] no patch found at %s, skipping patch apply\n' "$PATCH_FILE"

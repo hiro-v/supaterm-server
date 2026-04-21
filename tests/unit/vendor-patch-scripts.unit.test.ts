@@ -13,32 +13,30 @@ afterEach(() => {
 });
 
 describe('vendor patch scripts', () => {
-  test('libghosty patch workflow can patch and reapply wrapper changes with injected paths', () => {
+  test('libghosty patch workflow can patch and reapply upstream submodule changes with injected paths', () => {
     const root = createTempRoot('libghosty-script-');
     const packageRoot = path.join(root, 'third_party/libghostty');
     const ghosttyRoot = path.join(packageRoot, 'ghostty');
-    const sourceFile = path.join(packageRoot, 'lib/sample.ts');
+    const sourceFile = path.join(ghosttyRoot, 'src/sample.zig');
     const patchDir = path.join(root, 'patches/libghosty');
     const patchFile = path.join(patchDir, 'libghosty.patch');
 
     mkdirSync(path.dirname(sourceFile), { recursive: true });
-    writeFileSync(sourceFile, 'export const value = "before";\n');
-    initGitRepo(root, ['third_party/libghostty/lib/sample.ts']);
+    writeFileSync(sourceFile, 'const value = "before";\n');
 
     mkdirSync(ghosttyRoot, { recursive: true });
-    writeFileSync(path.join(ghosttyRoot, 'README.md'), 'ghostty baseline\n');
-    initGitRepo(ghosttyRoot, ['README.md']);
+    initGitRepo(ghosttyRoot, ['src/sample.zig']);
 
-    writeFileSync(sourceFile, 'export const value = "after";\n');
+    writeFileSync(sourceFile, 'const value = "after";\n');
     runScript('scripts/libghosty-patch.sh', ['patch'], {
       SUPATERM_ROOT_OVERRIDE: root,
       SUPATERM_LIBGHOSTTY_PATCH_DIR: patchDir,
       SUPATERM_LIBGHOSTTY_GHOSTTY_PATH: ghosttyRoot,
     });
 
-    expect(readFileSync(patchFile, 'utf8')).toContain('third_party/libghostty/lib/sample.ts');
+    expect(readFileSync(patchFile, 'utf8')).toContain('src/sample.zig');
 
-    writeFileSync(sourceFile, 'export const value = "before";\n');
+    writeFileSync(sourceFile, 'const value = "before";\n');
     runScript('scripts/libghosty-patch.sh', ['apply'], {
       SUPATERM_ROOT_OVERRIDE: root,
       SUPATERM_LIBGHOSTTY_PATCH_DIR: patchDir,

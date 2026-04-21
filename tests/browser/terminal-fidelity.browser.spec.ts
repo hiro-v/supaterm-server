@@ -211,11 +211,12 @@ test('wide glyphs emoji underline and inverse video stay visible in the viewport
   await page.waitForTimeout(250);
 
   const infoText = await readPaneInfo(page);
+  const normalizedInfoText = infoText.replace(/\s+/g, ' ');
   expect(infoText).toContain('Screen Buffernormal');
-  expect(infoText).toContain('ASCII_READY');
-  expect(infoText).toContain('UNDERLINE_READY');
-  expect(infoText).toContain('INVERSE_READY');
-  expect(infoText).toContain('WIDE_GLYPH 界🙂 MIX');
+  expect(normalizedInfoText).toContain('ASCII_READY');
+  expect(normalizedInfoText).toContain('UNDERLINE_READY');
+  expect(normalizedInfoText).toContain('INVERSE_READY');
+  expect(normalizedInfoText).toContain('WIDE_GLYPH 界🙂 MIX');
   expect(infoText).toMatch(/Styled Cells\d+/);
 
   const styledMatch = infoText.match(/Styled Cells(\d+)/);

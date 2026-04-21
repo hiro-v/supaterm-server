@@ -355,10 +355,21 @@ function collectBuildBaseline(): BuildBaseline {
 }
 
 async function collectLatestCiTimings(): Promise<{ runUrl: string; jobs: CiJobTiming[] }> {
-  const run = await Bun.$`gh run view 24335799504 --json jobs,url`.json() as {
+  const runId = process.env.GITHUB_RUN_ID ?? '24335799504';
+  const hasGithubToken = Boolean(process.env.GH_TOKEN || process.env.GITHUB_TOKEN);
+  if (!hasGithubToken && !process.env.CI) {
+    return { runUrl: '', jobs: [] };
+  }
+
+  let run: {
     jobs: Array<{ name: string; startedAt: string; completedAt: string }>;
     url: string;
   };
+  try {
+    run = await Bun.$`gh run view ${runId} --json jobs,url`.json();
+  } catch {
+    return { runUrl: '', jobs: [] };
+  }
 
   return {
     runUrl: run.url,
