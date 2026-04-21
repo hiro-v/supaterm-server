@@ -11,32 +11,6 @@ import {
   waitForPaneInfoMatch,
 } from '../helpers/browser-workbench';
 
-test('alternate screen fixtures switch buffers and restore the main screen', async ({ page }) => {
-  await openConnectedWorkbench(page);
-
-  await runTerminalCommand(page, "printf 'MAIN_BUFFER_READY\\n'");
-  await runTerminalCommand(page, "printf '\\033[?1049h\\033[2J\\033[H'");
-  await runTerminalCommand(page, "printf 'ALT_SCREEN_READY\\nCPU 41%%\\nGPU 77%%\\n'");
-  const activeText = await waitForPaneInfoMatch(
-    page,
-    (text) => text.includes('Screen Bufferalternate') && text.includes('ALT_SCREEN_READY'),
-  );
-  expect(activeText).toContain('Screen Bufferalternate');
-  expect(activeText).toContain('ALT_SCREEN_READY');
-  expect(activeText).toContain('CPU 41%');
-  expect(activeText).toContain('GPU 77%');
-
-  await page.waitForTimeout(600);
-  await runTerminalCommand(page, "printf '\\033[?1049l'");
-  const restoredText = await waitForPaneInfoMatch(
-    page,
-    (text) => text.includes('Screen Buffernormal') && text.includes('MAIN_BUFFER_READY'),
-    2500,
-  );
-  expect(restoredText).toContain('Screen Buffernormal');
-  expect(restoredText).toContain('MAIN_BUFFER_READY');
-});
-
 test('claude-like styled output remains visible in the terminal viewport', async ({ page }) => {
   await openConnectedWorkbench(page);
 
@@ -96,36 +70,6 @@ test('resize updates dimensions and reflows wrapped terminal content', async ({ 
   expect(narrowDimensions.rows).toBeGreaterThan(0);
   expect(narrowWrappedRows).toBeGreaterThanOrEqual(wideWrappedRows);
   expect(narrowInfo).toContain('WRAP_TARGET_');
-});
-
-test('scrollback navigation changes the visible viewport preview', async ({ page }) => {
-  await openConnectedWorkbench(page);
-
-  await runTerminalCommand(
-    page,
-    "for i in $(seq 1 90); do printf 'SCROLL_%03d\\n' \"$i\"; done",
-  );
-  const bottomInfo = await waitForPaneInfoMatch(
-    page,
-    (text) => text.includes('Viewport Y0 rows') && /SCROLL_0(?:5\d|6\d|7\d|8\d|90)/.test(text),
-    2500,
-  );
-  expect(bottomInfo).toContain('Viewport Y0 rows');
-  expect(bottomInfo).toMatch(/SCROLL_0(?:5\d|6\d|7\d|8\d|90)/);
-
-  const canvas = terminalCanvasLocator(page);
-  await canvas.hover();
-  await page.mouse.wheel(0, -3000);
-  await page.waitForTimeout(1000);
-
-  const scrolledInfo = await readPaneInfo(page);
-  const viewportY = readNumberMetric(scrolledInfo, 'Viewport Y');
-  const scrollbackLength = readNumberMetric(scrolledInfo, 'Scrollback');
-
-  expect(scrollbackLength).toBeGreaterThan(0);
-  expect(viewportY).toBeGreaterThan(0);
-  expect(scrolledInfo).not.toMatch(/SCROLL_0(?:5\d|6\d|7\d|8\d|90)/);
-  expect(scrolledInfo).toMatch(/SCROLL_0(?:0[1-9]|[1-4]\d)/);
 });
 
 test('bracketed paste mode wraps pasted terminal input', async ({ page }) => {

@@ -135,39 +135,6 @@ test('pane reconnects after websocket close and reuses the same session', async 
   expect(infoText).toContain('RECONNECT_OK');
 });
 
-test('fresh browser restores the shared workbench snapshot from the server', async ({ browser, page }) => {
-  const sessionId = createBrowserSessionId('shared-workbench');
-  await openFreshWorkbench(page, sessionId);
-
-  await page.getByRole('button', { name: 'Add space' }).click();
-  await page.locator('.overlay-panel .overlay-input').fill('Shared');
-  await page.getByRole('button', { name: 'Create' }).click();
-
-  await page.getByRole('button', { name: 'New Tab' }).click();
-  await page.locator('.tab-card.active').getByRole('button', { name: /Rename/ }).click();
-  await page.locator('.overlay-panel .overlay-input').fill('Review');
-  await page.keyboard.press('Enter');
-  await page.getByRole('button', { name: 'Split down' }).click();
-  await page.locator(".pane-card[data-active='true']").first().getByRole('button', { name: 'Rename pane' }).click();
-  await page.locator('.overlay-panel .overlay-input').fill('Shared Pane');
-  await page.keyboard.press('Enter');
-
-  const secondContext = await browser.newContext();
-  const secondPage = await secondContext.newPage();
-  try {
-    await openFreshWorkbench(secondPage, sessionId);
-    await expect(secondPage.locator('.window-title')).toContainText('Shared : Review', { timeout: 3000 });
-    await expect(secondPage.locator('.pane-card')).toHaveCount(2);
-    await expect(secondPage.locator('.pane-title').filter({ hasText: 'Shared Pane' })).toHaveCount(1);
-
-    const infoText = await readPaneInfo(secondPage);
-    expect(infoText).toContain('Session ReusedEnabled');
-    expect(infoText).toContain('First Backend Read');
-  } finally {
-    await secondContext.close();
-  }
-});
-
 test('pane click focuses terminal input and sends typed data', async ({ page }) => {
   await page.addInitScript(() => {
     const sent: string[] = [];

@@ -50,6 +50,19 @@ try {
     });
   });
 
+  if (exitCode !== 0) {
+    const stdout = server.stdout().trim();
+    const stderr = server.stderr().trim();
+    if (stdout.length > 0) {
+      console.error('--- supaterm-server stdout ---');
+      console.error(stdout);
+    }
+    if (stderr.length > 0) {
+      console.error('--- supaterm-server stderr ---');
+      console.error(stderr);
+    }
+  }
+
   process.exit(exitCode);
 } finally {
   await server.stop();
