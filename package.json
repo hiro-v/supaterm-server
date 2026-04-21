@@ -32,6 +32,7 @@
     "test:browser:smoke": "bun run ./scripts/test-browser.ts tests/browser/smoke.browser.spec.ts",
     "hooks:install": "git config core.hooksPath .git-hooks",
     "hooks:pre-commit": "bun run ./scripts/pre-commit.ts",
+    "hooks:pre-push": "bun run ./scripts/pre-push.ts",
     "zig": "zig build",
     "zig:run": "zig build run",
     "zig:check": "zig build check",

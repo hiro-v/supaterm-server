@@ -173,8 +173,15 @@ mise exec -- bun run perf:check
 
 Git hooks:
 - installer: `bun run hooks:install`
-- checked-in hook path: [.git-hooks/pre-commit](.git-hooks/pre-commit)
-- planner/runtime: [scripts/pre-commit.ts](scripts/pre-commit.ts)
+- checked-in hook paths:
+  - [.git-hooks/pre-commit](.git-hooks/pre-commit)
+  - [.git-hooks/pre-push](.git-hooks/pre-push)
+- hook runtimes:
+  - [scripts/pre-commit.ts](scripts/pre-commit.ts)
+  - [scripts/pre-push.ts](scripts/pre-push.ts)
+- manual runs:
+  - `mise exec -- bun run hooks:pre-commit`
+  - `mise exec -- bun run hooks:pre-push`
 
 CI and release:
 - test matrix: [.github/workflows/test.yml](.github/workflows/test.yml)

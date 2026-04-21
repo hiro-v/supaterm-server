@@ -24,3 +24,4 @@ Use this when deciding the minimum acceptable proof for a change.
 - Vendored backend changes: `mise exec -- bun run test:e2e` and `mise exec -- bun run zmx:smoke`
 - Release readiness: `mise exec -- bun run harness`
 - Linux-sensitive local changes on macOS: `bun run docker:linux:check`, then `bun run docker:linux:test` if needed
+- Before pushing, prefer `mise exec -- bun run hooks:pre-push` or let the checked-in `pre-push` hook run the required local gate automatically.

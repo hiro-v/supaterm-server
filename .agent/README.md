@@ -14,5 +14,8 @@ Toolchain default:
 - prefer `mise exec -- bun ...` and `mise exec -- zig ...` over assuming system `bun`/`zig`
 - prefer the unified `mise run setup`, `mise run dev`, `mise run check`, and `mise run release` tasks when they match the job
 - for local Linux parity on macOS, prefer `bun run docker:linux:check` or `bun run docker:linux:test`
+- after `bun run hooks:install`, expect both checked-in hooks to be active:
+  - `pre-commit` for staged-file scoped checks
+  - `pre-push` for the required local critical suite before pushing
 
 The matching `.claude` path is a symlink to this folder so other agent tooling can reuse the same source of truth.

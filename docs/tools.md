@@ -149,9 +149,26 @@ Local hooks:
 ```bash
 mise exec -- bun run hooks:install
 mise exec -- bun run hooks:pre-commit
+mise exec -- bun run hooks:pre-push
 ```
 
-The checked-in hook entrypoint is [.git-hooks/pre-commit](../.git-hooks/pre-commit), and the staging planner lives in [scripts/pre-commit.ts](../scripts/pre-commit.ts).
+The checked-in hook entrypoints are:
+- [.git-hooks/pre-commit](../.git-hooks/pre-commit)
+- [.git-hooks/pre-push](../.git-hooks/pre-push)
+
+Hook runtimes:
+- [scripts/pre-commit.ts](../scripts/pre-commit.ts)
+- [scripts/pre-push.ts](../scripts/pre-push.ts)
+
+`pre-push` is the required local push gate. It runs the critical non-browser suite before anything is pushed:
+- `bun run zig:lint`
+- `zig build check`
+- `bun run web:typecheck`
+- `bun run test:unit`
+- `bun run test:integration`
+- `bun run test:contract`
+- `bun run test:e2e`
+- `bun run web:build`
 
 Zig lint:
 ```bash
@@ -223,6 +240,7 @@ Patch workflow tests:
 
 Hook and workflow config tests:
 - `tests/unit/pre-commit.unit.test.ts`
+- `tests/unit/pre-push.unit.test.ts`
 - `tests/unit/ci-config.unit.test.ts`
 - keep hook/workflow behavior explicit enough that local tests can assert the intended execution matrix and cache surfaces
 
