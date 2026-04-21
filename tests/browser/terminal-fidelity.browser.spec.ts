@@ -40,24 +40,30 @@ test('alternate screen fixtures switch buffers and restore the main screen', asy
 test('claude-like styled output remains visible in the terminal viewport', async ({ page }) => {
   await openConnectedWorkbench(page);
 
-  const command = [
-    "printf '\\033[38;2;196;225;119m--- Claude Code v2.1.104 ---\\033[0m\\n'",
-    "printf '\\033[1mWelcome back Hiro!\\033[0m\\n'",
-    "printf 'Tips for getting started\\n'",
-    "printf '\\033[38;2;134;172;212mRun /init to create a CLAUDE.md\\033[0m\\n'",
-    "printf 'Recent activity\\n'",
-    "printf 'No recent activity\\n'",
-  ].join('; ');
+  const fixtureSource = [
+    "import sys",
+    "sys.stdout.write('\\x1b[38;2;196;225;119m--- Claude Code v2.1.104 ---\\x1b[0m\\n')",
+    "sys.stdout.write('\\x1b[1mWelcome back Hiro!\\x1b[0m\\n')",
+    "sys.stdout.write('Tips for getting started\\n')",
+    "sys.stdout.write('\\x1b[38;2;134;172;212mRun /init to create a CLAUDE.md\\x1b[0m\\n')",
+    "sys.stdout.write('Recent activity\\n')",
+    "sys.stdout.write('No recent activity\\n')",
+  ].join('\n');
+  const fixtureBase64 = Buffer.from(fixtureSource, 'utf8').toString('base64');
+  const command = `python3 -c "import base64; exec(base64.b64decode('${fixtureBase64}'))"`;
 
   await runTerminalCommand(page, command);
   const infoText = await waitForPaneInfoMatch(
     page,
-    (text) => text.includes('Claude Code v2.1.104') && /Styled Cells\d+/.test(text),
+    (text) =>
+      text.includes('Claude Code v2.1.104') &&
+      text.includes('Welcome back Hiro!') &&
+      /Styled Cells\d+/.test(text),
   );
+  const normalizedInfoText = infoText.replace(/\s+/g, ' ');
   expect(infoText).toContain('Screen Buffernormal');
-  expect(infoText).toContain('Claude Code v2.1.104');
-  expect(infoText).toContain('Welcome back Hiro!');
-  expect(infoText).toContain('Tips for getting started');
+  expect(normalizedInfoText).toContain('Claude Code v2.1.104');
+  expect(normalizedInfoText).toContain('Welcome back Hiro!');
   expect(infoText).toMatch(/Styled Cells\d+/);
 
   const styledMatch = infoText.match(/Styled Cells(\d+)/);

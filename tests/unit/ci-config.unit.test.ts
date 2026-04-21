@@ -16,6 +16,7 @@ describe('CI and hook configuration', () => {
 
     expect(workflow).toContain('ubuntu-latest');
     expect(workflow).toContain('macos-latest');
+    expect(workflow).toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"');
     expect(workflow).toContain('submodules: recursive');
     expect(workflow).toContain('uses: ./.github/actions/setup-ci');
     expect(workflow).toContain('bun run test:unit');
@@ -42,7 +43,7 @@ describe('CI and hook configuration', () => {
     expect(workflow).toContain('SUPATERM_PERF_SAMPLES=1 bun run perf:current');
     expect(workflow).toContain('bun run perf:check');
     expect(workflow).toContain('SUPATERM_PERF_BASELINE_PATH=.agent-harness/artifacts/perf-baseline.base.json');
-    expect(workflow).toContain('actions/upload-artifact@v4');
+    expect(workflow).toContain('actions/upload-artifact@v7');
     expect(workflow).toContain('GITHUB_STEP_SUMMARY');
     expect(workflow).toContain('PERF_BASELINE_SOURCE');
     expect(workflow).toContain('formatTrend(report.comparisons.shellReadyMs)');
@@ -67,8 +68,8 @@ describe('CI and hook configuration', () => {
     const action = readRepoFile('.github/actions/setup-ci/action.yml');
 
     expect(action).toContain('oven-sh/setup-bun@v2');
-    expect(action).toContain('mlugg/setup-zig@v2');
-    expect(action).toContain('actions/cache@v4');
+    expect(action).toContain('mlugg/setup-zig@v2.2.1');
+    expect(action).toContain('actions/cache@v5');
     expect(action).toContain('~/.bun/install/cache');
     expect(action).toContain('~/.cache/zig');
     expect(action).toContain('~/.cache/ms-playwright');
@@ -117,11 +118,15 @@ describe('CI and hook configuration', () => {
   test('tip release workflow force-moves the tip tag and updates the prerelease', () => {
     const workflow = readRepoFile('.github/workflows/release-tip.yml');
 
+    expect(workflow).toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"');
     expect(workflow).toContain('git tag -fa tip');
     expect(workflow).toContain('git push --force origin tip');
     expect(workflow).toContain('gh release create tip');
     expect(workflow).toContain('gh release edit tip');
     expect(workflow).toContain('--prerelease');
+    expect(workflow).toContain('actions/checkout@v6');
+    expect(workflow).toContain('actions/upload-artifact@v7');
+    expect(workflow).toContain('actions/download-artifact@v8');
   });
 
   test('nightly release workflow bumps patch semver on a midnight GMT schedule and ships macOS/Linux binaries', () => {
@@ -129,6 +134,7 @@ describe('CI and hook configuration', () => {
 
     expect(workflow).toContain('cron: "0 0 * * *"');
     expect(workflow).toContain('workflow_dispatch: {}');
+    expect(workflow).toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"');
     expect(workflow).toContain('bun run --silent version:bump:patch');
     expect(workflow).toContain('git commit -m "chore(release): bump nightly version to ${VERSION}"');
     expect(workflow).toContain('TAG="v${VERSION}-nightly"');
@@ -138,12 +144,16 @@ describe('CI and hook configuration', () => {
     expect(workflow).toContain('sh ./scripts/package-release.sh "${{ needs.prepare.outputs.version }}"');
     expect(workflow).toContain('gh release create "${{ needs.prepare.outputs.tag }}"');
     expect(workflow).toContain('--prerelease');
+    expect(workflow).toContain('actions/checkout@v6');
+    expect(workflow).toContain('actions/upload-artifact@v7');
+    expect(workflow).toContain('actions/download-artifact@v8');
   });
 
   test('production release workflow tags the current semver version and publishes a GitHub release', () => {
     const workflow = readRepoFile('.github/workflows/release-prod.yml');
 
     expect(workflow).toContain('workflow_dispatch: {}');
+    expect(workflow).toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"');
     expect(workflow).toContain('bun run --silent version:current');
     expect(workflow).toContain('TAG="v${VERSION}"');
     expect(workflow).toContain('git tag -a "${TAG}"');
@@ -154,6 +164,9 @@ describe('CI and hook configuration', () => {
     expect(workflow).toContain('sh ./scripts/package-release.sh "${{ needs.prepare.outputs.version }}"');
     expect(workflow).toContain('gh release create "${{ needs.prepare.outputs.tag }}"');
     expect(workflow).not.toContain('--prerelease');
+    expect(workflow).toContain('actions/checkout@v6');
+    expect(workflow).toContain('actions/upload-artifact@v7');
+    expect(workflow).toContain('actions/download-artifact@v8');
   });
 });
 
