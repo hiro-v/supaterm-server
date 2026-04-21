@@ -248,17 +248,22 @@ Hook and workflow config tests:
 
 Primary workflows:
 - test matrix: [.github/workflows/test.yml](../.github/workflows/test.yml)
+- browser smoke: [.github/workflows/browser-smoke.yml](../.github/workflows/browser-smoke.yml)
 - tip channel updater: [.github/workflows/release-tip.yml](../.github/workflows/release-tip.yml)
 - nightly patch prerelease: [.github/workflows/release-nightly.yml](../.github/workflows/release-nightly.yml)
 - production release: [.github/workflows/release-prod.yml](../.github/workflows/release-prod.yml)
 - shared cache/bootstrap action: [.github/actions/setup-ci/action.yml](../.github/actions/setup-ci/action.yml)
 
 Current CI policy:
-- run Linux and macOS first
+- expose a single required `pr_status` branch-protection check
+- run the critical PR jobs in parallel:
+  - `quality (ubuntu-latest)`
+  - `build (macos-latest)`
 - restore Bun, Zig, build, and Playwright caches through the shared setup action
 - provision `zlint` in CI and export `ZLINT_BIN` for the repo lint script
 - checkout submodules recursively so vendored `ghostty` and `zmx` source are present before any build/test step
 - publish a non-blocking Ubuntu perf base/current/check artifact set and step summary, resolving the PR base branch baseline when available before running `bun run perf:check`
+- keep browser testing visible through the separate non-blocking `browser-smoke` workflow instead of the required PR gate
 - keep the `tip` prerelease channel aligned with `main` by force-moving the `tip` tag and refreshing the GitHub prerelease assets
 - run a nightly `00:00` GMT/UTC patch bump workflow that updates the shared package version, pushes a `vX.Y.Z-nightly` tag, and publishes macOS/Linux prerelease binaries
 - run a manual production workflow that tags the current shared package version as `vX.Y.Z` and publishes a GitHub release with macOS/Linux binaries

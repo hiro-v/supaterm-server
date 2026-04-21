@@ -25,3 +25,6 @@ Use this when deciding the minimum acceptable proof for a change.
 - Release readiness: `mise exec -- bun run harness`
 - Linux-sensitive local changes on macOS: `bun run docker:linux:check`, then `bun run docker:linux:test` if needed
 - Before pushing, prefer `mise exec -- bun run hooks:pre-push` or let the checked-in `pre-push` hook run the required local gate automatically.
+- For PR workflow changes, remember the intended split:
+  - `pr_status` is the required branch-protection check
+  - `browser-smoke` and `perf report` stay non-blocking

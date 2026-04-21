@@ -57,11 +57,16 @@ Measured at:
 - commit: `786971dc623cf7e24ad340b4eadd9806885593be`
 - report: `.agent-harness/artifacts/perf-baseline.json`
 
-CI job durations from the latest green matrix run:
+Historical CI job durations from the older full matrix snapshot captured with this baseline:
 - `core (macos-latest)`: `158s`
 - `browser (macos-latest)`: `129s`
 - `core (ubuntu-latest)`: `197s`
 - `browser (ubuntu-latest)`: `81s`
+
+Current workflow shape is different:
+- required PR gate: `pr_status`
+- critical parallel jobs: `quality (ubuntu-latest)` and `build (macos-latest)`
+- browser coverage: non-blocking `browser-smoke`
 
 Build artifacts:
 - pinned `third_party/libghostty/ghostty-vt.wasm`: `423,910 bytes`

@@ -17,5 +17,6 @@ Toolchain default:
 - after `bun run hooks:install`, expect both checked-in hooks to be active:
   - `pre-commit` for staged-file scoped checks
   - `pre-push` for the required local critical suite before pushing
+- for CI reasoning, treat `pr_status` as the single required PR gate and `browser-smoke` / `perf report` as visible but non-blocking workflows
 
 The matching `.claude` path is a symlink to this folder so other agent tooling can reuse the same source of truth.

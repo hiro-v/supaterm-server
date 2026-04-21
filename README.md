@@ -185,13 +185,19 @@ Git hooks:
 
 CI and release:
 - test matrix: [.github/workflows/test.yml](.github/workflows/test.yml)
+- browser smoke: [.github/workflows/browser-smoke.yml](.github/workflows/browser-smoke.yml)
 - shared cache/bootstrap action: [.github/actions/setup-ci/action.yml](.github/actions/setup-ci/action.yml)
 - tip channel updater: [.github/workflows/release-tip.yml](.github/workflows/release-tip.yml)
 - nightly patch prerelease: [.github/workflows/release-nightly.yml](.github/workflows/release-nightly.yml)
 - production release: [.github/workflows/release-prod.yml](.github/workflows/release-prod.yml)
 
 The shared CI action also provisions `zlint` and exports `ZLINT_BIN` so Zig linting works on clean GitHub runners without relying on GHQ.
+The required PR gate is now the single `pr_status` job from `test.yml`. It depends on the two critical parallel jobs:
+- `quality (ubuntu-latest)` for lint, typecheck, unit/integration/contract/e2e, and web build
+- `build (macos-latest)` for macOS build/typecheck/unit/build compatibility
+
 The test workflow also runs a non-blocking Ubuntu perf job that resolves a PR-base baseline when available, collects `.agent-harness/artifacts/perf-current.json`, runs `perf:check` against that baseline, uploads base/current/check artifacts, and appends a short renderer/runtime plus budget summary to the job summary, including current-vs-baseline deltas, startup marks, atlas resets, and retained GPU buffer capacities.
+Browser coverage is now split out into a separate non-blocking `browser-smoke` workflow with a minimal cross-platform smoke suite. It keeps `libghostty` browser coverage visible without making the PR gate depend on the flaky full interaction suite.
 Nightly releases now run at `00:00` GMT/UTC every day and via `workflow_dispatch`, bump the shared patch version automatically, create a `vX.Y.Z-nightly` tag, and publish macOS/Linux prerelease artifacts. Production releases are manual via `workflow_dispatch`, tag the current shared semver as `vX.Y.Z`, build the same macOS/Linux artifacts, and publish a GitHub release.
 Local Docker support exists only for developer-side Linux parity. GitHub Actions keeps using native `mise` setup on Linux runners.
 
