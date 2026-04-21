@@ -154,6 +154,7 @@ describe('CI and hook configuration', () => {
     expect(workflow).toContain('gh release create tip');
     expect(workflow).toContain('gh release edit tip');
     expect(workflow).toContain('--prerelease');
+    expect(workflow).toContain('zig build --release=small -Dembed-assets=true');
     expect(workflow).toContain('actions/checkout@v6');
     expect(workflow).toContain('actions/upload-artifact@v7');
     expect(workflow).toContain('actions/download-artifact@v8');
