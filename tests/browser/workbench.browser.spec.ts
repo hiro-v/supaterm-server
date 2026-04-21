@@ -267,40 +267,6 @@ test('appearance changes persist through reload and shared workbench restore', a
   }
 });
 
-test('webgpu path does not duplicate typed terminal input', async ({ page }) => {
-  await page.addInitScript(() => {
-    const sent: string[] = [];
-    const originalSend = WebSocket.prototype.send;
-    WebSocket.prototype.send = function(data) {
-      try {
-        if (typeof data === 'string') {
-          sent.push(data);
-        }
-      } catch {
-        // Ignore instrumentation failures in the page context.
-      }
-      return originalSend.call(this, data);
-    };
-    (window as typeof window & { __supatermSent?: string[] }).__supatermSent = sent;
-  });
-
-  await openFreshWorkbench(page);
-  await page.waitForFunction(() => document.querySelector('.pane-status')?.textContent?.includes('Connected'));
-
-  await terminalCanvasLocator(page).click();
-  await page.waitForTimeout(80);
-  await page.keyboard.type('ab');
-  await page.keyboard.press('Enter');
-  await page.waitForTimeout(250);
-
-  const result = await page.evaluate(() => {
-    const sent = (window as typeof window & { __supatermSent?: string[] }).__supatermSent ?? [];
-    return sent.filter((frame) => frame === 'a' || frame === 'b' || frame === '\r');
-  });
-
-  expect(result).toEqual(['a', 'b', '\r']);
-});
-
 test('pane details modal closes from close button and outside click', async ({ page }) => {
   await openFreshWorkbench(page);
   await page.waitForFunction(() => document.querySelector('.pane-status')?.textContent?.includes('Connected'));

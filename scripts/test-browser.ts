@@ -14,16 +14,22 @@ const server = await startServer({
 });
 
 try {
+  const shard = process.env.SUPATERM_PLAYWRIGHT_SHARD;
+  const args = [
+    'playwright',
+    'test',
+    'tests/browser',
+    '--reporter=line',
+    '--workers',
+    process.env.SUPATERM_BROWSER_WORKERS ?? '1',
+  ];
+  if (shard) {
+    args.push('--shard', shard);
+  }
+
   const child = spawn(
     'bunx',
-    [
-      'playwright',
-      'test',
-      'tests/browser',
-      '--reporter=line',
-      '--workers',
-      process.env.SUPATERM_BROWSER_WORKERS ?? '1',
-    ],
+    args,
     {
       stdio: 'inherit',
       env: {

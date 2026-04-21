@@ -50,16 +50,22 @@ jobs:
       - run: bun run web:build
 
   browser:
-    name: browser (${{ matrix.os }})
+    name: browser (${{ matrix.os }}, ${{ matrix.shard }})
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
+        include:
+          - os: ubuntu-latest
+            shard: 1/2
+          - os: ubuntu-latest
+            shard: 2/2
+          - os: macos-latest
+            shard: 1/2
+          - os: macos-latest
+            shard: 2/2
     steps:
       - uses: actions/checkout@v4
         with:
@@ -78,6 +84,8 @@ jobs:
           install-playwright: "true"
 
       - run: bun run test:browser
+        env:
+          SUPATERM_PLAYWRIGHT_SHARD: ${{ matrix.shard }}
 
   perf:
     name: perf report (ubuntu-latest)

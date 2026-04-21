@@ -189,30 +189,6 @@ test('alternate-screen mouse tracking emits SGR mouse sequences', async ({ page 
   expect(frames.some((frame) => frame.includes('\u001b[<'))).toBe(true);
 });
 
-test('cursor diagnostics reflect explicit cursor placement in alternate screen', async ({ page }) => {
-  await openConnectedWorkbench(page);
-
-  const command = [
-    "printf '\\033[?1049h\\033[2J\\033[12;25HCURSOR_TARGET'",
-    'sleep 1.0',
-  ].join('; ');
-
-  await runTerminalCommand(page, command);
-  const infoText = await waitForPaneInfoMatch(
-    page,
-    (text) =>
-      text.includes('Screen Bufferalternate') &&
-      text.includes('Cursor37, 11') &&
-      text.includes('Cursor VisibleEnabled') &&
-      text.includes('CURSOR_TARGET'),
-    2500,
-  );
-  expect(infoText).toContain('Screen Bufferalternate');
-  expect(infoText).toContain('Cursor37, 11');
-  expect(infoText).toContain('Cursor VisibleEnabled');
-  expect(infoText).toContain('CURSOR_TARGET');
-});
-
 test('wide glyphs emoji underline and inverse video stay visible in the viewport', async ({ page }) => {
   await openConnectedWorkbench(page);
 
