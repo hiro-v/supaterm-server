@@ -16,7 +16,14 @@ const server = await startServer({
 try {
   const child = spawn(
     'bunx',
-    ['playwright', 'test', 'tests/browser', '--reporter=line'],
+    [
+      'playwright',
+      'test',
+      'tests/browser',
+      '--reporter=line',
+      '--workers',
+      process.env.SUPATERM_BROWSER_WORKERS ?? '1',
+    ],
     {
       stdio: 'inherit',
       env: {

@@ -50,9 +50,10 @@ test('claude-like styled output remains visible in the terminal viewport', async
   ].join('; ');
 
   await runTerminalCommand(page, command);
-  await page.waitForTimeout(250);
-
-  const infoText = await readPaneInfo(page);
+  const infoText = await waitForPaneInfoMatch(
+    page,
+    (text) => text.includes('Claude Code v2.1.104') && /Styled Cells\d+/.test(text),
+  );
   expect(infoText).toContain('Screen Buffernormal');
   expect(infoText).toContain('Claude Code v2.1.104');
   expect(infoText).toContain('Welcome back Hiro!');
@@ -71,9 +72,10 @@ test('resize updates dimensions and reflows wrapped terminal content', async ({ 
     page,
     "printf 'WRAP_TARGET_ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789_abcdefghijklmnopqrstuvwxyz_REPEAT_REPEAT_REPEAT_REPEAT_REPEAT_REPEAT_REPEAT\\n'",
   );
-  await page.waitForTimeout(250);
-
-  const wideInfo = await readPaneInfo(page);
+  const wideInfo = await waitForPaneInfoMatch(
+    page,
+    (text) => text.includes('WRAP_TARGET_') && text.includes('Dimensions'),
+  );
   const wideDimensions = readDimensions(wideInfo);
   const wideWrappedRows = readNumberMetric(wideInfo, 'Wrapped Rows');
 
@@ -97,9 +99,11 @@ test('scrollback navigation changes the visible viewport preview', async ({ page
     page,
     "for i in $(seq 1 90); do printf 'SCROLL_%03d\\n' \"$i\"; done",
   );
-  await page.waitForTimeout(300);
-
-  const bottomInfo = await readPaneInfo(page);
+  const bottomInfo = await waitForPaneInfoMatch(
+    page,
+    (text) => text.includes('Viewport Y0 rows') && /SCROLL_0(?:5\d|6\d|7\d|8\d|90)/.test(text),
+    2500,
+  );
   expect(bottomInfo).toContain('Viewport Y0 rows');
   expect(bottomInfo).toMatch(/SCROLL_0(?:5\d|6\d|7\d|8\d|90)/);
 
@@ -123,9 +127,10 @@ test('bracketed paste mode wraps pasted terminal input', async ({ page }) => {
   await openConnectedWorkbench(page);
 
   await runTerminalCommand(page, "printf '\\033[?2004hPASTE_MODE_READY\\n'");
-  await page.waitForTimeout(200);
-
-  const infoText = await readPaneInfo(page);
+  const infoText = await waitForPaneInfoMatch(
+    page,
+    (text) => text.includes('Bracketed PasteEnabled'),
+  );
   expect(infoText).toContain('Bracketed PasteEnabled');
 
   await terminalCanvasLocator(page).click();
@@ -164,9 +169,14 @@ test('alternate-screen mouse tracking emits SGR mouse sequences', async ({ page 
   ].join('; ');
 
   await runTerminalCommand(page, command);
-  await page.waitForTimeout(180);
-
-  const infoText = await readPaneInfo(page);
+  const infoText = await waitForPaneInfoMatch(
+    page,
+    (text) =>
+      text.includes('Screen Bufferalternate') &&
+      text.includes('Mouse TrackingEnabled') &&
+      text.includes('SGR MouseEnabled'),
+    2500,
+  );
   expect(infoText).toContain('Screen Bufferalternate');
   expect(infoText).toContain('Mouse TrackingEnabled');
   expect(infoText).toContain('SGR MouseEnabled');
@@ -188,9 +198,15 @@ test('cursor diagnostics reflect explicit cursor placement in alternate screen',
   ].join('; ');
 
   await runTerminalCommand(page, command);
-  await page.waitForTimeout(180);
-
-  const infoText = await readPaneInfo(page);
+  const infoText = await waitForPaneInfoMatch(
+    page,
+    (text) =>
+      text.includes('Screen Bufferalternate') &&
+      text.includes('Cursor37, 11') &&
+      text.includes('Cursor VisibleEnabled') &&
+      text.includes('CURSOR_TARGET'),
+    2500,
+  );
   expect(infoText).toContain('Screen Bufferalternate');
   expect(infoText).toContain('Cursor37, 11');
   expect(infoText).toContain('Cursor VisibleEnabled');
@@ -208,9 +224,16 @@ test('wide glyphs emoji underline and inverse video stay visible in the viewport
   ].join('; ');
 
   await runTerminalCommand(page, command);
-  await page.waitForTimeout(250);
-
-  const infoText = await readPaneInfo(page);
+  const infoText = await waitForPaneInfoMatch(
+    page,
+    (text) =>
+      text.includes('Screen Buffernormal') &&
+      text.includes('ASCII_READY') &&
+      text.includes('UNDERLINE_READY') &&
+      text.includes('INVERSE_READY') &&
+      text.includes('WIDE_GLYPH'),
+    2500,
+  );
   const normalizedInfoText = infoText.replace(/\s+/g, ' ');
   expect(infoText).toContain('Screen Buffernormal');
   expect(normalizedInfoText).toContain('ASCII_READY');
