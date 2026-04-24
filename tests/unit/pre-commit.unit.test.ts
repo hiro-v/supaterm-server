@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { planPreCommit } from '../../scripts/pre-commit';
+import { planPreCommit, selectWebTypecheckCommand } from '../../scripts/pre-commit';
 
 describe('pre-commit planning', () => {
   test('skips when no files are staged', () => {
@@ -63,5 +63,10 @@ describe('pre-commit planning', () => {
     expect(actionPlan.skip).toBe(false);
     expect(actionPlan.runWebChecks).toBe(true);
     expect(actionPlan.runZigChecks).toBe(false);
+  });
+
+  test('uses a direct web typecheck when the libghostty upstream submodule is not initialized', () => {
+    expect(selectWebTypecheckCommand(false)).toEqual(['bun', 'run', 'web:typecheck:fast']);
+    expect(selectWebTypecheckCommand(true)).toEqual(['bun', 'run', 'web:typecheck']);
   });
 });

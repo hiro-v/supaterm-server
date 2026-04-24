@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 
 type PreCommitPlan = {
   stagedFiles: string[];
@@ -79,6 +81,12 @@ export function planPreCommit(stagedFiles: string[]): PreCommitPlan {
   };
 }
 
+export function selectWebTypecheckCommand(libghosttySubmoduleReady: boolean): string[] {
+  return libghosttySubmoduleReady
+    ? ['bun', 'run', 'web:typecheck']
+    : ['bun', 'run', 'web:typecheck:fast'];
+}
+
 if (import.meta.main) {
   if (process.env.SKIP_SUPATERM_PRECOMMIT === '1') {
     process.exit(0);
@@ -91,7 +99,7 @@ if (import.meta.main) {
   }
 
   if (plan.runWebChecks) {
-    runCommand(['bun', 'run', 'web:typecheck']);
+    runCommand(selectWebTypecheckCommand(hasInitializedLibghosttySubmodule()));
     runCommand(['bun', 'run', 'test:unit']);
   }
 
@@ -116,6 +124,10 @@ function getStagedFiles(): string[] {
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean);
+}
+
+function hasInitializedLibghosttySubmodule(): boolean {
+  return existsSync(path.join(import.meta.dir, '..', 'third_party', 'libghostty', 'ghostty', '.git'));
 }
 
 function runCommand(command: string[]): void {

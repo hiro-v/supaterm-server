@@ -167,6 +167,8 @@ mise exec -- bun run hooks:pre-commit
 mise exec -- bun run hooks:pre-push
 ```
 
+`pre-commit` now falls back to a direct `web` package typecheck when `third_party/libghostty/ghostty` is not initialized, so an upstream submodule update is not mandatory just to commit workflow/docs/web-adjacent changes. `pre-push` remains the stricter full gate.
+
 The checked-in hook entrypoints are:
 - [.git-hooks/pre-commit](../.git-hooks/pre-commit)
 - [.git-hooks/pre-push](../.git-hooks/pre-push)
