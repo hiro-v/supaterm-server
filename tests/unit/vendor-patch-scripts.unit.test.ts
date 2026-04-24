@@ -94,7 +94,7 @@ function initGitRepo(cwd: string, paths: string[]): void {
 function runGit(cwd: string, args: string[]): void {
   const result = spawnSync('git', args, {
     cwd,
-    env: { ...process.env, SKIP_SUPATERM_PRECOMMIT: '1' },
+    env: createIsolatedGitEnv({ SKIP_SUPATERM_PRECOMMIT: '1' }),
     encoding: 'utf8',
     stdio: 'pipe',
   });
@@ -107,7 +107,7 @@ function runScript(scriptPath: string, args: string[], env: Record<string, strin
   const repoRoot = path.resolve(import.meta.dir, '../..');
   const result = spawnSync('sh', [path.join(repoRoot, scriptPath), ...args], {
     cwd: repoRoot,
-    env: { ...process.env, ...env },
+    env: createIsolatedGitEnv(env),
     encoding: 'utf8',
     stdio: 'pipe',
   });
@@ -115,4 +115,18 @@ function runScript(scriptPath: string, args: string[], env: Record<string, strin
   if (result.status !== 0) {
     throw new Error(`${scriptPath} ${args.join(' ')} failed\n${result.stdout}\n${result.stderr}`);
   }
+}
+
+function createIsolatedGitEnv(overrides: Record<string, string>): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (!key.startsWith('GIT_')) {
+      env[key] = value;
+    }
+  }
+
+  return {
+    ...env,
+    ...overrides,
+  };
 }
