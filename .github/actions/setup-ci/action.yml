@@ -21,10 +21,6 @@ runs:
       with:
         bun-version: ${{ inputs.bun-version }}
 
-    - uses: mlugg/setup-zig@v2.2.1
-      with:
-        version: ${{ inputs.zig-version }}
-
     - uses: actions/cache@v5
       with:
         path: |
@@ -50,6 +46,86 @@ runs:
         key: ${{ runner.os }}-playwright-${{ inputs.cache-key-suffix }}
         restore-keys: |
           ${{ runner.os }}-playwright-
+
+    - name: Install Zig
+      shell: bash
+      env:
+        ZIG_VERSION: ${{ inputs.zig-version }}
+      run: |
+        set -euo pipefail
+
+        case "${RUNNER_OS}" in
+          Linux) zig_os="linux" ;;
+          macOS) zig_os="macos" ;;
+          *)
+            echo "Unsupported runner OS: ${RUNNER_OS}" >&2
+            exit 1
+            ;;
+        esac
+
+        case "$(uname -m)" in
+          x86_64|amd64) zig_arch="x86_64" ;;
+          arm64|aarch64) zig_arch="aarch64" ;;
+          *)
+            echo "Unsupported runner architecture: $(uname -m)" >&2
+            exit 1
+            ;;
+        esac
+
+        zig_tool_dir="${HOME}/.cache/zig/toolchains"
+        zig_install_dir="${zig_tool_dir}/${zig_arch}-${zig_os}-${ZIG_VERSION}"
+
+        if [ ! -x "${zig_install_dir}/zig" ]; then
+          mkdir -p "${zig_tool_dir}"
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "${tmpdir}"' EXIT
+
+          export ZIG_OS="${zig_os}"
+          export ZIG_ARCH="${zig_arch}"
+          zig_metadata="$(
+            curl -fsSL https://ziglang.org/download/index.json | \
+              bun --eval '
+                const index = JSON.parse(await Bun.stdin.text());
+                const version = process.env.ZIG_VERSION;
+                const target = `${process.env.ZIG_ARCH}-${process.env.ZIG_OS}`;
+                const release = index[version];
+                if (!release) {
+                  console.error(`Unknown Zig version: ${version}`);
+                  process.exit(1);
+                }
+                const artifact = release[target];
+                if (!artifact?.tarball || !artifact?.shasum) {
+                  console.error(`No Zig artifact for ${target} at ${version}`);
+                  process.exit(1);
+                }
+                console.log(artifact.tarball);
+                console.log(artifact.shasum);
+              '
+          )"
+
+          zig_url="$(printf '%s\n' "${zig_metadata}" | sed -n '1p')"
+          zig_shasum="$(printf '%s\n' "${zig_metadata}" | sed -n '2p')"
+          if [ -z "${zig_url}" ] || [ -z "${zig_shasum}" ]; then
+            echo "Failed to resolve Zig download metadata" >&2
+            exit 1
+          fi
+          archive_path="${tmpdir}/${zig_url##*/}"
+
+          curl -fsSL "${zig_url}" -o "${archive_path}"
+          printf '%s  %s\n' "${zig_shasum}" "${archive_path}" | shasum -a 256 -c -
+          tar -xf "${archive_path}" -C "${tmpdir}"
+
+          extracted_dir="$(find "${tmpdir}" -mindepth 1 -maxdepth 1 -type d | head -n1)"
+          if [ -z "${extracted_dir}" ]; then
+            echo "Failed to locate extracted Zig directory" >&2
+            exit 1
+          fi
+
+          rm -rf "${zig_install_dir}"
+          mv "${extracted_dir}" "${zig_install_dir}"
+        fi
+
+        echo "${zig_install_dir}" >> "$GITHUB_PATH"
 
     - name: Install root dependencies
       shell: bash

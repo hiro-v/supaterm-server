@@ -16,7 +16,7 @@ describe('CI and hook configuration', () => {
 
     expect(workflow).toContain('ubuntu-latest');
     expect(workflow).toContain('macos-latest');
-    expect(workflow).toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"');
+    expect(workflow).not.toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24');
     expect(workflow).toContain('permissions: {}');
     expect(workflow).toContain('submodules: recursive');
     expect(workflow).toContain('uses: ./.github/actions/setup-ci');
@@ -82,7 +82,7 @@ describe('CI and hook configuration', () => {
     const packageJson = readRepoFile('package.json');
 
     expect(workflow).toContain('name: browser-smoke');
-    expect(workflow).toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"');
+    expect(workflow).not.toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24');
     expect(workflow).toContain('permissions: {}');
     expect(workflow).toContain('group: browser-smoke-${{ github.ref }}');
     expect(workflow).toContain('continue-on-error: true');
@@ -98,13 +98,18 @@ describe('CI and hook configuration', () => {
     const action = readRepoFile('.github/actions/setup-ci/action.yml');
 
     expect(action).toContain('oven-sh/setup-bun@v2');
-    expect(action).toContain('mlugg/setup-zig@v2.2.1');
+    expect(action).not.toContain('mlugg/setup-zig@');
     expect(action).toContain('actions/cache@v5');
     expect(action).toContain('~/.bun/install/cache');
     expect(action).toContain('~/.cache/zig');
+    expect(action).toContain('.cache/zig/toolchains');
     expect(action).toContain('~/.cache/ms-playwright');
     expect(action).toContain('.tooling/zlint/zig-out');
     expect(action).toContain('third_party/zmx/.zig-cache');
+    expect(action).toContain('curl -fsSL https://ziglang.org/download/index.json');
+    expect(action).not.toContain('mapfile -t zig_metadata');
+    expect(action).toContain("zig_url=\"$(printf '%s\\n' \"${zig_metadata}\" | sed -n '1p')\"");
+    expect(action).toContain('echo "${zig_install_dir}" >> "$GITHUB_PATH"');
     expect(action).toContain('cd web');
     expect(action).toContain('bun install --frozen-lockfile');
     expect(action).toContain('third_party/libghostty/node_modules');
@@ -149,7 +154,7 @@ describe('CI and hook configuration', () => {
   test('tip release workflow force-moves the tip tag and updates the prerelease', () => {
     const workflow = readRepoFile('.github/workflows/release-tip.yml');
 
-    expect(workflow).toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"');
+    expect(workflow).not.toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24');
     expect(workflow).toContain('permissions: {}');
     expect(workflow).toContain('group: ${{ github.workflow }}-${{ github.ref }}');
     expect(workflow).toContain('platform: linux');
@@ -172,7 +177,7 @@ describe('CI and hook configuration', () => {
 
     expect(workflow).toContain('cron: "0 0 * * *"');
     expect(workflow).toContain('workflow_dispatch: {}');
-    expect(workflow).toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"');
+    expect(workflow).not.toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24');
     expect(workflow).toContain('permissions: {}');
     expect(workflow).toContain('group: ${{ github.workflow }}-${{ github.ref }}');
     expect(workflow).toContain('platform: linux');
@@ -205,7 +210,7 @@ describe('CI and hook configuration', () => {
     const workflow = readRepoFile('.github/workflows/release-prod.yml');
 
     expect(workflow).toContain('workflow_dispatch: {}');
-    expect(workflow).toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"');
+    expect(workflow).not.toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24');
     expect(workflow).toContain('permissions: {}');
     expect(workflow).toContain('group: ${{ github.workflow }}-${{ github.ref }}');
     expect(workflow).toContain('platform: linux');
