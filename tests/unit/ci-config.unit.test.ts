@@ -17,9 +17,11 @@ describe('CI and hook configuration', () => {
     expect(workflow).toContain('ubuntu-latest');
     expect(workflow).toContain('macos-latest');
     expect(workflow).toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"');
+    expect(workflow).toContain('permissions: {}');
     expect(workflow).toContain('submodules: recursive');
     expect(workflow).toContain('uses: ./.github/actions/setup-ci');
     expect(workflow).toContain('name: quality (ubuntu-latest)');
+    expect(workflow).toContain('permissions:\n      contents: read');
     expect(workflow).toContain('name: build (macos-latest)');
     expect(workflow).toContain('name: pr_status');
     expect(workflow).toContain('needs:');
@@ -81,10 +83,12 @@ describe('CI and hook configuration', () => {
 
     expect(workflow).toContain('name: browser-smoke');
     expect(workflow).toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"');
+    expect(workflow).toContain('permissions: {}');
     expect(workflow).toContain('group: browser-smoke-${{ github.ref }}');
     expect(workflow).toContain('continue-on-error: true');
     expect(workflow).toContain('platform: linux');
     expect(workflow).toContain('platform: macos');
+    expect(workflow).toContain('permissions:\n      contents: read');
     expect(workflow).toContain('install-playwright: "true"');
     expect(workflow).toContain('bun run test:browser:smoke');
     expect(packageJson).toContain('"test:browser:smoke": "bun run ./scripts/test-browser.ts tests/browser/smoke.browser.spec.ts"');
@@ -146,9 +150,12 @@ describe('CI and hook configuration', () => {
     const workflow = readRepoFile('.github/workflows/release-tip.yml');
 
     expect(workflow).toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"');
+    expect(workflow).toContain('permissions: {}');
     expect(workflow).toContain('group: ${{ github.workflow }}-${{ github.ref }}');
     expect(workflow).toContain('platform: linux');
     expect(workflow).toContain('platform: macos');
+    expect(workflow).toContain('permissions:\n      contents: read');
+    expect(workflow).toContain('permissions:\n      contents: write');
     expect(workflow).toContain('git tag -fa tip');
     expect(workflow).toContain('git push --force origin tip');
     expect(workflow).toContain('gh release create tip');
@@ -160,21 +167,32 @@ describe('CI and hook configuration', () => {
     expect(workflow).toContain('actions/download-artifact@v8');
   });
 
-  test('nightly release workflow bumps patch semver on a midnight GMT schedule and ships macOS/Linux binaries', () => {
+  test('nightly release workflow uses a date-based nightly tag, prerelease assets, and generated notes', () => {
     const workflow = readRepoFile('.github/workflows/release-nightly.yml');
 
     expect(workflow).toContain('cron: "0 0 * * *"');
     expect(workflow).toContain('workflow_dispatch: {}');
     expect(workflow).toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"');
+    expect(workflow).toContain('permissions: {}');
     expect(workflow).toContain('group: ${{ github.workflow }}-${{ github.ref }}');
     expect(workflow).toContain('platform: linux');
     expect(workflow).toContain('platform: macos');
-    expect(workflow).toContain('bun run --silent version:bump:patch');
-    expect(workflow).toContain('git commit -m "chore(release): bump nightly version to ${VERSION}"');
-    expect(workflow).toContain('TAG="v${VERSION}-nightly"');
+    expect(workflow).toContain('permissions:\n      contents: read');
+    expect(workflow).toContain('permissions:\n      contents: write');
+    expect(workflow).toContain('RELEASE_DAY="$(date -u +%F)"');
+    expect(workflow).toContain('VERSION="nightly-${RELEASE_DAY}"');
+    expect(workflow).toContain('TAG="nightly-${RELEASE_DAY}"');
+    expect(workflow).toContain('git tag -a "${TAG}" -m "Nightly ${RELEASE_DAY}" "${GITHUB_SHA}"');
+    expect(workflow).toContain('--generate-notes');
+    expect(workflow).toContain('echo "Nightly tag ${TAG} already exists" >&2');
+    expect(workflow).not.toContain('git push origin HEAD:main');
+    expect(workflow).not.toContain('version:next:nightly');
+    expect(workflow).not.toContain('git commit -m "chore(release): bump nightly version to ${VERSION}"');
+    expect(workflow).not.toContain('gh release view "${{ needs.prepare.outputs.tag }}"');
+    expect(workflow).not.toContain('--clobber');
     expect(workflow).toContain('ubuntu-latest');
     expect(workflow).toContain('macos-latest');
-    expect(workflow).toContain('zig build --release=small -Dembed-assets=true');
+    expect(workflow).toContain('zig build --release=small -Dembed-assets=true -Dapp-version="${{ needs.prepare.outputs.version }}"');
     expect(workflow).toContain('sh ./scripts/package-release.sh "${{ needs.prepare.outputs.version }}"');
     expect(workflow).toContain('gh release create "${{ needs.prepare.outputs.tag }}"');
     expect(workflow).toContain('--prerelease');
@@ -183,18 +201,24 @@ describe('CI and hook configuration', () => {
     expect(workflow).toContain('actions/download-artifact@v8');
   });
 
-  test('production release workflow tags the current semver version and publishes a GitHub release', () => {
+  test('production release workflow tags the current semver version and publishes a generated-notes GitHub release', () => {
     const workflow = readRepoFile('.github/workflows/release-prod.yml');
 
     expect(workflow).toContain('workflow_dispatch: {}');
     expect(workflow).toContain('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"');
+    expect(workflow).toContain('permissions: {}');
     expect(workflow).toContain('group: ${{ github.workflow }}-${{ github.ref }}');
     expect(workflow).toContain('platform: linux');
     expect(workflow).toContain('platform: macos');
+    expect(workflow).toContain('permissions:\n      contents: read');
+    expect(workflow).toContain('permissions:\n      contents: write');
     expect(workflow).toContain('bun run --silent version:current');
     expect(workflow).toContain('TAG="v${VERSION}"');
     expect(workflow).toContain('git tag -a "${TAG}"');
     expect(workflow).toContain('git push origin "${TAG}"');
+    expect(workflow).toContain('--generate-notes');
+    expect(workflow).not.toContain('gh release view "${{ needs.prepare.outputs.tag }}"');
+    expect(workflow).not.toContain('--clobber');
     expect(workflow).toContain('ubuntu-latest');
     expect(workflow).toContain('macos-latest');
     expect(workflow).toContain('zig build --release=small -Dembed-assets=true');

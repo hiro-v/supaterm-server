@@ -6,6 +6,8 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
+permissions: {}
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -118,12 +120,8 @@ jobs:
         run: |
           set -euo pipefail
           gh release create "${{ needs.prepare.outputs.tag }}" \
+            --verify-tag \
             --title "Supaterm v${{ needs.prepare.outputs.version }}" \
-            --notes "Production release v${{ needs.prepare.outputs.version }}." \
+            --generate-notes \
             dist/* \
-            -R "${GITHUB_REPOSITORY}" 2>/dev/null || \
-          gh release edit "${{ needs.prepare.outputs.tag }}" \
-            --title "Supaterm v${{ needs.prepare.outputs.version }}" \
-            --notes "Production release v${{ needs.prepare.outputs.version }}." \
             -R "${GITHUB_REPOSITORY}"
-          gh release upload "${{ needs.prepare.outputs.tag }}" dist/* --clobber -R "${GITHUB_REPOSITORY}"

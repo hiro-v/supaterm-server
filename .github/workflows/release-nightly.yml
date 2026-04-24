@@ -8,44 +8,46 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
+permissions: {}
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   prepare:
-    name: bump nightly version
+    name: tag nightly release
     runs-on: ubuntu-latest
     permissions:
       contents: write
     outputs:
-      version: ${{ steps.bump.outputs.version }}
-      tag: ${{ steps.bump.outputs.tag }}
+      version: ${{ steps.prepare.outputs.version }}
+      tag: ${{ steps.prepare.outputs.tag }}
+      release_day: ${{ steps.prepare.outputs.release_day }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: main
-          submodules: recursive
+          submodules: false
 
-      - uses: ./.github/actions/setup-ci
-        with:
-          cache-key-suffix: nightly-${{ hashFiles('bun.lock', 'package.json', 'web/package.json', '.gitmodules', 'zlint.json', 'patches/libghosty/libghosty.patch', 'patches/zmx/zmx.patch') }}
-
-      - name: Bump patch version and tag nightly release
-        id: bump
+      - name: Compute nightly tag and create it
+        id: prepare
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="$(bun run --silent version:bump:patch)"
-          TAG="v${VERSION}-nightly"
+          RELEASE_DAY="$(date -u +%F)"
+          VERSION="nightly-${RELEASE_DAY}"
+          TAG="nightly-${RELEASE_DAY}"
+          if git rev-parse "${TAG}" >/dev/null 2>&1; then
+            echo "Nightly tag ${TAG} already exists" >&2
+            exit 1
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json web/package.json
-          git commit -m "chore(release): bump nightly version to ${VERSION}"
-          git tag -a "${TAG}" -m "Nightly ${VERSION}"
-          git push origin HEAD:main
+          git tag -a "${TAG}" -m "Nightly ${RELEASE_DAY}" "${GITHUB_SHA}"
           git push origin "${TAG}"
+          echo "release_day=${RELEASE_DAY}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
@@ -84,7 +86,7 @@ jobs:
       - name: Build embedded release binary
         shell: bash
         run: |
-          zig build --release=small -Dembed-assets=true
+          zig build --release=small -Dembed-assets=true -Dapp-version="${{ needs.prepare.outputs.version }}"
 
       - name: Package release artifacts
         shell: bash
@@ -119,14 +121,9 @@ jobs:
         run: |
           set -euo pipefail
           gh release create "${{ needs.prepare.outputs.tag }}" \
+            --verify-tag \
             --prerelease \
-            --title "Supaterm Nightly v${{ needs.prepare.outputs.version }}" \
-            --notes "Nightly patch release for v${{ needs.prepare.outputs.version }}." \
+            --title "Supaterm Nightly ${{ needs.prepare.outputs.release_day }}" \
+            --generate-notes \
             dist/* \
-            -R "${GITHUB_REPOSITORY}" 2>/dev/null || \
-          gh release edit "${{ needs.prepare.outputs.tag }}" \
-            --prerelease \
-            --title "Supaterm Nightly v${{ needs.prepare.outputs.version }}" \
-            --notes "Nightly patch release for v${{ needs.prepare.outputs.version }}." \
             -R "${GITHUB_REPOSITORY}"
-          gh release upload "${{ needs.prepare.outputs.tag }}" dist/* --clobber -R "${GITHUB_REPOSITORY}"
