@@ -4,6 +4,11 @@
 
 Bootstrap:
 ```bash
+make setup
+```
+
+Direct `mise` bootstrap:
+```bash
 mise trust mise.toml
 mise install
 mise exec -- bun install
@@ -12,6 +17,16 @@ mise exec -- bun run hooks:install
 ```
 
 Unified defaults:
+```bash
+make dev
+make check
+make release
+make unit
+make browser
+make web-build
+```
+
+Equivalent `mise` commands:
 ```bash
 mise run setup
 mise run dev
@@ -265,8 +280,8 @@ Current CI policy:
 - publish a non-blocking Ubuntu perf base/current/check artifact set and step summary, resolving the PR base branch baseline when available before running `bun run perf:check`
 - keep browser testing visible through the separate non-blocking `browser-smoke` workflow instead of the required PR gate
 - keep the `tip` prerelease channel aligned with `main` by force-moving the `tip` tag and refreshing the GitHub prerelease assets
-- run a nightly `00:00` GMT/UTC patch bump workflow that updates the shared package version, pushes a `vX.Y.Z-nightly` tag, and publishes macOS/Linux prerelease binaries
-- run a manual production workflow that tags the current shared package version as `vX.Y.Z` and publishes a GitHub release with macOS/Linux binaries
+- run a nightly `00:00` GMT/UTC workflow that creates a date-based `nightly-YYYY-MM-DD` tag from the current `main` commit without pushing back to `main`, and publishes macOS/Linux prerelease binaries with GitHub-generated release notes
+- run a manual production workflow that tags the current shared package version as `vX.Y.Z` and publishes a GitHub release with GitHub-generated notes and macOS/Linux binaries
 - keep GitHub Actions on native Linux/macOS runners with `mise`; Docker is only for local Linux dev parity
 
 Shared version tooling:
