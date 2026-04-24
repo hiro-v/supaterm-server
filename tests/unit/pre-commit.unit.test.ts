@@ -34,6 +34,14 @@ describe('pre-commit planning', () => {
     expect(plan.runZigChecks).toBe(false);
   });
 
+  test('runs web checks for proxy workspace changes', () => {
+    const plan = planPreCommit(['proxy/src/index.ts']);
+
+    expect(plan.skip).toBe(false);
+    expect(plan.runWebChecks).toBe(true);
+    expect(plan.runZigChecks).toBe(false);
+  });
+
   test('runs zig checks for runtime and zmx changes', () => {
     const plan = planPreCommit([
       'src/main.zig',

@@ -48,6 +48,31 @@ jobs:
       - run: bun run test:e2e
       - run: bun run web:build
 
+  proxy_linux:
+    name: proxy (ubuntu-latest)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Compute cache key inputs
+        id: cache_key
+        shell: bash
+        run: |
+          echo "libghostty=$(git rev-parse HEAD:third_party/libghostty/ghostty)" >> "$GITHUB_OUTPUT"
+          echo "zmx=$(git rev-parse HEAD:third_party/zmx)" >> "$GITHUB_OUTPUT"
+
+      - uses: ./.github/actions/setup-ci
+        with:
+          cache-key-suffix: ${{ hashFiles('bun.lock', 'package.json', '.gitmodules', 'zlint.json', 'patches/libghosty/libghosty.patch', 'patches/zmx/zmx.patch') }}-${{ steps.cache_key.outputs.libghostty }}-${{ steps.cache_key.outputs.zmx }}
+
+      - run: bun run proxy:typecheck
+      - run: bun run proxy:build
+      - run: bun test tests/e2e/proxy-relay.e2e.test.ts
+
   build_macos:
     name: build (macos-latest)
     runs-on: macos-latest
@@ -218,6 +243,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - quality_linux
+      - proxy_linux
       - build_macos
     permissions:
       contents: read
@@ -227,8 +253,9 @@ jobs:
         run: |
           set -euo pipefail
           echo "quality_linux=${{ needs.quality_linux.result }}"
+          echo "proxy_linux=${{ needs.proxy_linux.result }}"
           echo "build_macos=${{ needs.build_macos.result }}"
-          if [ "${{ needs.quality_linux.result }}" != "success" ] || [ "${{ needs.build_macos.result }}" != "success" ]; then
+          if [ "${{ needs.quality_linux.result }}" != "success" ] || [ "${{ needs.proxy_linux.result }}" != "success" ] || [ "${{ needs.build_macos.result }}" != "success" ]; then
             echo "Critical PR jobs did not all succeed."
             exit 1
           fi

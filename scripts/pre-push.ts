@@ -5,6 +5,7 @@ export const PRE_PUSH_COMMANDS = [
   ['bun', 'run', 'zig:lint'],
   ['zig', 'build', 'check'],
   ['bun', 'run', 'web:typecheck'],
+  ['bun', 'run', 'proxy:typecheck'],
   ['bun', 'run', 'test:unit'],
   ['bun', 'run', 'test:integration'],
   ['bun', 'run', 'test:contract'],

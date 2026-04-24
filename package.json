@@ -5,7 +5,8 @@
   "type": "module",
   "packageManager": "bun@1.3.11",
   "workspaces": [
-    "web/*"
+    "web/*",
+    "proxy"
   ],
   "scripts": {
     "setup": "mise trust mise.toml && mise install && mise run setup",
@@ -55,6 +56,11 @@
     "web:typecheck:fast": "cd web && bun run typecheck",
     "web:typecheck": "bun run libghosty:apply && cd web && bun run typecheck",
     "web:lint": "bun run libghosty:apply && cd web && bun run lint",
+    "proxy:dev": "cd proxy && bun run dev",
+    "proxy:build": "cd proxy && bun run build",
+    "proxy:typecheck": "cd proxy && bun run typecheck",
+    "proxy:lint": "cd proxy && bun run lint",
+    "proxy:deploy": "cd proxy && bun run deploy",
     "perf:baseline": "bun run ./scripts/perf-baseline.ts",
     "perf:current": "SUPATERM_PERF_OUTPUT_PATH=.agent-harness/artifacts/perf-current.json bun run ./scripts/perf-baseline.ts",
     "perf:check": "bun run ./scripts/perf-check.ts",

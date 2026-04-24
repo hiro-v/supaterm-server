@@ -67,11 +67,157 @@ bun run docker:linux:test
 - `nightly`: `nightly-YYYY-MM-DD` prerelease with GitHub-generated notes
 - `prod`: `vX.Y.Z` release with GitHub-generated notes
 
-See:
-- [docs/tools.md](docs/tools.md)
-- [.github/workflows/release-tip.yml](.github/workflows/release-tip.yml)
-- [.github/workflows/release-nightly.yml](.github/workflows/release-nightly.yml)
-- [.github/workflows/release-prod.yml](.github/workflows/release-prod.yml)
+Local Linux dev container:
+```bash
+docker compose build linux-dev
+bun run docker:linux:setup
+```
+
+That container is only for local development parity. CI still runs on native Linux and macOS runners with `mise`, not Docker.
+
+Run the web server in dev mode:
+```bash
+mise exec -- zig build run
+```
+
+Run the built CLI directly:
+```bash
+./zig-out/bin/supaterm-server --help
+./zig-out/bin/supaterm-server --version
+./zig-out/bin/supaterm-server --listen 0.0.0.0:3000
+```
+
+Local PTY startup defaults to `--shell-startup fast`, which skips user shell init files for supported shells (`bash`, `zsh`, `fish`) to reduce first-byte latency in the browser. Use `mise exec -- zig build run -- --shell-startup full` when you want the user shell's full init path instead.
+Workbench snapshots default to `supaterm-server.sqlite3`; override that with `mise exec -- zig build run -- --sqlite-path /path/to/supaterm.sqlite3`.
+
+Build the web bundle:
+```bash
+mise exec -- bun run web:build
+```
+
+The web and `zmx` scripts auto-apply tracked vendor patches before they build or test against vendored source. The browser bundle consumes the vendored `libghostty` TypeScript sources directly and uses the pinned `third_party/libghostty/ghostty-vt.wasm` artifact, so CI does not depend on Ghostty fetching extra upstream assets on every `web:build`.
+The default browser terminal visual profile is now a blackout baseline: black background, white foreground, `MesloLGS NF` at `15px`, and explicit Nerd Font symbol fallback for private-use icon glyphs such as `yazi` file icons. Users can change theme colors and font selection from the workbench, and those preferences persist with the shared snapshot.
+
+For Cloudflare relay hosting, keep `supaterm-server` local-only and let Zig stay the policy source:
+```bash
+./zig-out/bin/supaterm-server \
+  --listen 127.0.0.1:3000 \
+  --token-policy session \
+  --enable-share-api \
+  --share-token-secret "$SUPATERM_SHARE_TOKEN_SECRET"
+```
+The relay host then consumes `GET /api/sessions/{id}/share`, opens the local session websocket with that token, and publishes the relay socket with host-chosen `mode`, `title`, and the Zig-issued `expires_at_unix_ms`. The Cloudflare relay still caps missing or oversized expiries to 60 minutes so Durable Object state expires quickly. See [docs/cloudflare-proxy.md](docs/cloudflare-proxy.md).
+
+Build the single embedded release binary:
+```bash
+mise run release
+```
+
+The embedded build now always refreshes `web/dist`, generates a dynamic asset manifest under `src/.embedded-web/web_assets.generated.zig`, stages the built Bun output under `src/.embedded-web/`, and bundles that staged output into `zig-out/bin/supaterm-server`. The checked-in [src/web_assets.zig](src/web_assets.zig) is now just a thin wrapper over that generated manifest, so release packaging follows whatever files Vite/Bun actually emitted instead of a hard-coded asset list.
+
+## CLI Examples
+
+Inspect the CLI surface:
+```bash
+mise exec -- zig build run -- --help
+mise exec -- zig build run -- --version
+```
+
+Run the built binary on all interfaces:
+```bash
+./zig-out/bin/supaterm-server --listen 0.0.0.0:3000
+```
+
+Run with a Supaterm-managed `zmx` backend:
+```bash
+./zig-out/bin/supaterm-server \
+  --backend zmx \
+  --zmx-socket-dir /tmp/zmx-501 \
+  --sqlite-path ./supaterm-server.sqlite3
+```
+
+In that mode, Supaterm owns the browser workbench snapshot and will create or reuse `zmx` sessions from stable pane session IDs. Open the browser with a stable shared session such as:
+```text
+http://127.0.0.1:3000/?session=demo
+```
+
+Attach to an already-existing raw local `zmx` session:
+```bash
+ZMX_DIR=/tmp/zmx-501 zmx list --short
+```
+
+If that prints a raw session name like `work`, start Supaterm against the same socket dir:
+```bash
+./zig-out/bin/supaterm-server \
+  --backend zmx \
+  --zmx-socket-dir /tmp/zmx-501
+```
+
+Then open:
+```text
+http://127.0.0.1:3000/?session=work
+```
+
+Supaterm now probes the raw `zmx` session name first. If `work` already exists in that socket dir, the pane attaches to that session instead of forcing a hashed `sess-...` alias.
+
+If your existing `zmx` sessions were created with a prefix, either:
+- use that full prefixed name as the browser `?session=...`, or
+- start Supaterm with `--zmx-session-prefix <prefix>` so the lookup matches your local `zmx` naming scheme.
+
+## Verification
+
+Fast paths:
+```bash
+mise exec -- bun run web:typecheck
+mise exec -- bun run test:unit
+mise exec -- bun run test:browser
+mise exec -- zig build check
+```
+
+`bun run test:browser` self-hosts a temporary local server for the Playwright run. It no longer depends on a manually running server on port `3000`.
+
+Full proof:
+```bash
+mise exec -- bun run test
+mise exec -- bun run harness
+```
+
+Performance:
+```bash
+mise exec -- bun run perf:baseline
+mise exec -- bun run perf:current
+mise exec -- bun run perf:check
+```
+
+Git hooks:
+- installer: `bun run hooks:install`
+- checked-in hook paths:
+  - [.git-hooks/pre-commit](.git-hooks/pre-commit)
+  - [.git-hooks/pre-push](.git-hooks/pre-push)
+- hook runtimes:
+  - [scripts/pre-commit.ts](scripts/pre-commit.ts)
+  - [scripts/pre-push.ts](scripts/pre-push.ts)
+- manual runs:
+  - `mise exec -- bun run hooks:pre-commit`
+  - `mise exec -- bun run hooks:pre-push`
+
+CI and release:
+- test matrix: [.github/workflows/test.yml](.github/workflows/test.yml)
+- browser smoke: [.github/workflows/browser-smoke.yml](.github/workflows/browser-smoke.yml)
+- shared cache/bootstrap action: [.github/actions/setup-ci/action.yml](.github/actions/setup-ci/action.yml)
+- tip channel updater: [.github/workflows/release-tip.yml](.github/workflows/release-tip.yml)
+- nightly patch prerelease: [.github/workflows/release-nightly.yml](.github/workflows/release-nightly.yml)
+- production release: [.github/workflows/release-prod.yml](.github/workflows/release-prod.yml)
+
+The shared CI action also provisions `zlint` and exports `ZLINT_BIN` so Zig linting works on clean GitHub runners without relying on GHQ.
+The required PR gate is now the single `pr_status` job from `test.yml`. It depends on the two critical parallel jobs:
+- `quality (ubuntu-latest)` for lint, typecheck, unit/integration/contract/e2e, and web build
+- `build (macos-latest)` for macOS build/typecheck/unit/build compatibility
+
+The test workflow also runs a non-blocking Ubuntu perf job that resolves a PR-base baseline when available, collects `.agent-harness/artifacts/perf-current.json`, runs `perf:check` against that baseline, uploads base/current/check artifacts, and appends a short renderer/runtime plus budget summary to the job summary, including current-vs-baseline deltas, startup marks, atlas resets, and retained GPU buffer capacities.
+Browser coverage is now split out into a separate non-blocking `browser-smoke` workflow with a minimal cross-platform smoke suite. It keeps `libghostty` browser coverage visible without making the PR gate depend on the flaky full interaction suite.
+Nightly releases now run at `00:00` GMT/UTC every day and via `workflow_dispatch`, create a `nightly-YYYY-MM-DD` tag from the current `main` commit, and publish macOS/Linux prerelease artifacts with generated release notes. Production releases are manual via `workflow_dispatch`, tag the current shared semver as `vX.Y.Z`, build the same macOS/Linux artifacts, and publish a GitHub release with generated notes.
+Local Docker support exists only for developer-side Linux parity. GitHub Actions keeps using native `mise` setup on Linux runners.
 
 ## Docs
 
@@ -81,13 +227,60 @@ Start here:
 - [docs/tools.md](docs/tools.md)
 - [docs/upstream-learnings.md](docs/upstream-learnings.md)
 
-Supporting refs:
+Supporting references:
 - [docs/stack.md](docs/stack.md)
-- [docs/code-structure.md](docs/code-structure.md)
 - [docs/terminal-fidelity.md](docs/terminal-fidelity.md)
-- [docs/performance-baseline.md](docs/performance-baseline.md)
-- [docs/swift-host-integration.md](docs/swift-host-integration.md)
-- [AGENTS.md](AGENTS.md)
+- Agent workflow: [AGENTS.md](AGENTS.md)
+- Code structure notes: [docs/code-structure.md](docs/code-structure.md)
+- Cloudflare relay package: [docs/cloudflare-proxy.md](docs/cloudflare-proxy.md)
+- Gap-closure exec plan: [docs/exec-plan-gap-closure.md](docs/exec-plan-gap-closure.md)
+- Performance baseline: [docs/performance-baseline.md](docs/performance-baseline.md)
+- Swift host contract: [docs/swift-host-integration.md](docs/swift-host-integration.md)
+- Harness overview: [.agent-harness/README.md](.agent-harness/README.md)
+
+Workflow references:
+- [.github/workflows/release-tip.yml](.github/workflows/release-tip.yml)
+- [.github/workflows/release-nightly.yml](.github/workflows/release-nightly.yml)
+- [.github/workflows/release-prod.yml](.github/workflows/release-prod.yml)
+
+## Third-Party Source Discipline
+
+Vendored upstreams:
+- `third_party/libghostty/ghostty`
+- `third_party/zmx`
+
+Local wrapper package:
+- `third_party/libghostty`
+- pinned runtime artifact: `third_party/libghostty/ghostty-vt.wasm`
+
+Update them through tracked git patches, not ad hoc local edits:
+```bash
+bun run libghosty:patch
+bun run libghosty:sync --ref <upstream-ref>
+
+bun run zmx:patch
+bun run zmx:sync --ref <upstream-ref>
+```
+
+Patch artifacts:
+- `patches/libghosty/libghosty.patch`
+- `patches/zmx/zmx.patch`
+
+Zig linting:
+- checked-in config: [zlint.json](zlint.json)
+- command: `bun run zig:lint`
+- wrapper: [scripts/zlint.sh](scripts/zlint.sh)
+
+## Repo Layout
+
+- `src/`: Zig server, session runtime, HTTP contract, backend adapters
+- `web/`: TypeScript browser app and workbench UI
+- `tests/`: unit, integration, contract, browser, and e2e tests
+- `docs/`: high-signal project references
+- `.agent/`: local agent instructions and reusable skills
+- `.git-hooks/`: checked-in local Git hooks
+- `.github/`: CI, cache, and release workflows
+- `third_party/`: local wrappers plus real upstream submodules
 
 ## Design Rules
 

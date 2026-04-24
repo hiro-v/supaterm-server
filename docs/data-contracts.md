@@ -59,6 +59,12 @@ Current shape:
 
 `GET /api/sessions/{id}/share` returns a concrete share grant when enabled.
 
+For the Cloudflare relay flow, this route is the Zig-owned validation boundary:
+- Zig decides whether the session can be published
+- the relay host consumes the returned `token` and `expires_at_unix_ms`
+- relay-only fields such as `mode` and `title` are chosen by the host when it opens `/api/shares/{id}/host`
+- the relay may still cap TTL to keep Durable Object state short-lived
+
 Current shape:
 ```json
 {
@@ -67,7 +73,7 @@ Current shape:
   "token": "hex-or-null",
   "token_transport": "query",
   "share_authority": "server",
-  "expires_at_unix_ms": null
+  "expires_at_unix_ms": 1760003600000
 }
 ```
 

@@ -30,6 +30,7 @@ const ServerConfig = struct {
     zmx_spawn_wait_ms: u16 = 25,
     access_token: ?[]const u8 = null,
     share_token_secret: ?[]const u8 = null,
+    share_grant_ttl_seconds: u32 = 3600,
     token_policy: TokenPolicyMode = .open,
     enable_share_api: bool = false,
 };
@@ -63,6 +64,7 @@ pub fn main() !void {
         .mode = config.token_policy,
         .global_token = config.access_token,
         .share_secret = config.share_token_secret,
+        .share_grant_ttl_seconds = config.share_grant_ttl_seconds,
     };
     var manager = SessionManager.init(allocator, config.backend, config.shell_startup, zmx_opts, token_policy);
     defer manager.deinit();
@@ -172,6 +174,10 @@ fn parseConfig(allocator: std.mem.Allocator) !ServerConfig {
             cfg.share_token_secret = arg[21..];
             continue;
         }
+        if (std.mem.startsWith(u8, arg, "--share-grant-ttl-seconds=")) {
+            cfg.share_grant_ttl_seconds = parseShareGrantTtlSeconds(arg[26..]);
+            continue;
+        }
         if (std.mem.startsWith(u8, arg, "--token-policy=")) {
             cfg.token_policy = try parseTokenPolicyMode(arg[15..]);
             token_policy_explicit = true;
@@ -229,6 +235,10 @@ fn parseConfig(allocator: std.mem.Allocator) !ServerConfig {
             if (args.next()) |value| cfg.share_token_secret = value;
             continue;
         }
+        if (std.mem.eql(u8, arg, "--share-grant-ttl-seconds")) {
+            if (args.next()) |value| cfg.share_grant_ttl_seconds = parseShareGrantTtlSeconds(value);
+            continue;
+        }
         if (std.mem.eql(u8, arg, "--token-policy")) {
             const value = args.next() orelse return error.MissingTokenPolicyValue;
             cfg.token_policy = try parseTokenPolicyMode(value);
@@ -250,6 +260,9 @@ fn parseConfig(allocator: std.mem.Allocator) !ServerConfig {
     }
     if (cfg.share_token_secret == null) {
         cfg.share_token_secret = std.posix.getenv("SUPATERM_SHARE_TOKEN_SECRET");
+    }
+    if (std.posix.getenv("SUPATERM_SHARE_GRANT_TTL_SECONDS")) |env_value| {
+        cfg.share_grant_ttl_seconds = parseShareGrantTtlSeconds(env_value);
     }
     if (std.mem.eql(u8, cfg.sqlite_path, "supaterm-server.sqlite3")) {
         if (std.posix.getenv("SUPATERM_SQLITE_PATH")) |env_value| {
@@ -303,7 +316,14 @@ fn printUsage() void {
     std.log.info("  --token-policy <open|global|session>  default: auto(open/global/session)", .{});
     std.log.info("  --access-token <token>          shared token when token-policy=global", .{});
     std.log.info("  --share-token-secret <secret>   HMAC secret when token-policy=session", .{});
+    std.log.info("  --share-grant-ttl-seconds <n>   relay share expiry cap in seconds (default/max: 3600)", .{});
     std.log.info("  --enable-share-api              expose /api/sessions/{{id}}/share for explicit token issuance", .{});
+}
+
+fn parseShareGrantTtlSeconds(raw: []const u8) u32 {
+    const parsed = std.fmt.parseInt(u32, raw, 10) catch return 3600;
+    if (parsed == 0) return 3600;
+    return @min(parsed, 3600);
 }
 
 fn printVersion() void {

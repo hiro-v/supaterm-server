@@ -30,6 +30,7 @@ export type StartServerOptions = {
   tokenPolicy?: 'open' | 'global' | 'session';
   accessToken?: string;
   shareTokenSecret?: string;
+  shareGrantTtlSeconds?: number;
   sqlitePath?: string;
   zmxSocketDir?: string;
   extraArgs?: string[];
@@ -82,6 +83,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
   if (options.tokenPolicy) args.push('--token-policy', options.tokenPolicy);
   if (options.accessToken) args.push('--access-token', options.accessToken);
   if (options.shareTokenSecret) args.push('--share-token-secret', options.shareTokenSecret);
+  if (options.shareGrantTtlSeconds != null) args.push('--share-grant-ttl-seconds', String(options.shareGrantTtlSeconds));
   if (options.backend === 'zmx') {
     args.push('--zmx-binary', zmxBinary);
     if (options.zmxSocketDir) args.push('--zmx-socket-dir', options.zmxSocketDir);
