@@ -1,6 +1,7 @@
 export interface ProxyEnv {
   SHARE_RELAY: DurableObjectNamespace;
   HOST_SHARED_SECRET?: string;
+  HOST_REGISTRATION_TOKEN_SECRET?: string;
   MAX_SHARE_TTL_SECONDS?: string;
 }
 
@@ -14,7 +15,7 @@ export function isAuthorizedHostRequest(
   return readBearerToken(request) === expected;
 }
 
-function readBearerToken(request: Request): string | null {
+export function readBearerToken(request: Request): string | null {
   const authorization = request.headers.get('Authorization');
   if (!authorization) return null;
   const match = authorization.match(/^Bearer\s+(.+)$/i);

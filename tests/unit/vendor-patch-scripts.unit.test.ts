@@ -94,6 +94,7 @@ function initGitRepo(cwd: string, paths: string[]): void {
 function runGit(cwd: string, args: string[]): void {
   const result = spawnSync('git', args, {
     cwd,
+    env: { ...process.env, SKIP_SUPATERM_PRECOMMIT: '1' },
     encoding: 'utf8',
     stdio: 'pipe',
   });
