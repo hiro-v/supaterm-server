@@ -2,7 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { bumpPatchVersion, parseSemver, readCanonicalVersion, setCanonicalVersion } from '../../scripts/release-version';
+import {
+  bumpPatchVersion,
+  parseSemver,
+  readCanonicalVersion,
+  setCanonicalVersion,
+} from '../../scripts/release-version';
 
 describe('release-version', () => {
   test('reads and bumps the shared patch version across root and web package manifests', () => {

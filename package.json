@@ -53,6 +53,7 @@
     "third-party:zmx:patch": "bun run zmx:patch",
     "third-party:zmx:apply": "bun run zmx:apply",
     "web:build": "bun run libghosty:apply && sh -c 'test -f third_party/libghostty/ghostty-vt.wasm || (cd third_party/libghostty && bun run build:wasm)' && cd web && bun run build",
+    "web:typecheck:fast": "cd web && bun run typecheck",
     "web:typecheck": "bun run libghosty:apply && cd web && bun run typecheck",
     "web:lint": "bun run libghosty:apply && cd web && bun run lint",
     "proxy:dev": "cd proxy && bun run dev",

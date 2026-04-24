@@ -11,6 +11,8 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
+permissions: {}
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -47,7 +49,7 @@ jobs:
 
       - name: Build release binary with embedded web assets
         shell: bash
-        run: zig build -Dembed-assets=true -Doptimize=ReleaseSafe
+        run: zig build --release=small -Dembed-assets=true
 
       - name: Package artifact
         shell: bash

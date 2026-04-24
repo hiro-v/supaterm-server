@@ -12,6 +12,8 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
+permissions: {}
+
 concurrency:
   group: browser-smoke-${{ github.ref }}
   cancel-in-progress: true
